@@ -1,0 +1,88 @@
+body {
+  background: #36393f;
+  color: white;
+  margin: 0px;
+  width: 100%;
+  font-size: 16px;
+}
+
+header {
+  background: #2f3136;
+  color: white;
+}
+
+main {
+  width: 100%;
+  max-width: 1000px;
+  padding: 5px 10px;
+  box-sizing: border-box;
+  margin: auto;
+}
+
+header div {
+  font-size: 30px;
+  padding: 20px;
+  width: 100%;
+  max-width: 1000px;
+  margin: auto;
+  display: flex;
+  justify-content: space-between;
+  box-sizing: border-box;
+}
+
+a {
+  color: lightblue;
+}
+
+.auth-holder {
+  display: flex;
+  align-items: center;
+}
+
+#auth {
+  display: inline-block;
+  text-align: center;
+  width: 46px;
+  height: 46px;
+  margin: 2px;
+  font-size: 30px;
+  border: 5px solid black;
+  border-radius: 10px;
+  box-sizing: border-box;
+  display: inline-block;
+  background: darkred;
+}
+
+#auth.yes {
+  background: darkgreen;
+}
+
+#auth.yes::before {
+  content: "✓";
+}
+
+#guilds {
+  padding: 10px;
+}
+
+.discord-invite {
+  display: inline-flex;
+  align-items: center;
+  background: #18191c;
+  padding: 10px;
+  color: white;
+  text-decoration: none;
+  border-radius: 8px;
+}
+
+.title {
+  font-size: 20px;
+  font-weight: bold;
+}
+
+.discord-invite img {
+  margin-right: 10px;
+  width: 64px;
+  height: 64px;
+  border-radius: 12px;
+}
