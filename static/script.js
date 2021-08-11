@@ -1,6 +1,6 @@
 fetch("/api/profile")
   .then(res => res.json())
-  .then(email => { if (email) { authenticated() } })
+  .then(auth => { if (auth) { authenticated() } })
 
 function authenticated () {
   document.getElementById("auth").classList.add("yes") 

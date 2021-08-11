@@ -46,13 +46,13 @@ func ProfileHandler(res http.ResponseWriter, req *http.Request) {
 	session, _ := store.Get(req, "session-name")
 	email := session.Values["email"]
 	if email == nil {
-		res.Write([]byte(""))
+		res.Write([]byte("false"))
 	} else {
 		match, _ := regexp.MatchString("umn\\.edu$", email.(string))
 		if match {
-			res.Write([]byte("\""+email.(string)+"\""))
+			res.Write([]byte("true"))
 		} else {
-			res.Write([]byte(""))
+			res.Write([]byte("false"))
 		}
 	}
 }
@@ -71,6 +71,11 @@ func ServeGuilds(res http.ResponseWriter, req *http.Request) {
 	if email == nil {
 		res.Write([]byte(""))
 	} else {
+		match, _ := regexp.MatchString("umn\\.edu$", email.(string))
+		if match == false {
+			return
+		}
+
 		guilds := []Guild{
 			{"https://discord.gg/***REMOVED***",
 			"UMN Mathematics",
