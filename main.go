@@ -81,7 +81,7 @@ func ServeGuilds(res http.ResponseWriter, req *http.Request) {
 			"UMN Mathematics",
 			"801115391836946473",
 			"08b8598c33d03d8f9a86a481e1bf9fdb",
-			"All MATH and STAT Classes"}
+			"All MATH and STAT Classes"},
 			{"https://discord.gg/***REMOVED***",
 			"UMN CSCI",
 			"689902170014875677",
