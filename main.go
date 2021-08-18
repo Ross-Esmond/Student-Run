@@ -91,7 +91,12 @@ func ServeGuilds(res http.ResponseWriter, req *http.Request) {
 			"UMN Physics",
 			"752993940571160768",
 			"bb4a15e7d8bf84a03124ae946a8cccb2",
-			"All PHYS Classes"}}
+			"All PHYS Classes"},
+			{"https://discord.gg/***REMOVED***",
+			"UMN Art Peeps",
+			"802222628952997909",
+			"4f6d56f37e97b541134f2dfe98ddfad2",
+			"All ARTS Classes"}}
 		res.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(res).Encode(guilds)
 	}
