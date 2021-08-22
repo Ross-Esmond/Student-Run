@@ -110,10 +110,19 @@ const rest = new REST({ version: '9' }).setToken(process.env.BOT_TOKEN);
     try {
         console.log('Started refreshing application (/) commands.');
 
-        await rest.put(
-            Routes.applicationGuildCommands(process.env.APP_ID, process.env.GUILD_ID),
-            { body: commands },
-        );
+        if (process.env.GUILD_ID) {
+            console.log('Loading commands to specific Guild for development.')
+            await rest.put(
+                Routes.applicationGuildCommands(process.env.APP_ID, process.env.GUILD_ID),
+                { body: commands },
+            );
+        } else {
+            console.log('Loading commands globally for production.')
+            await rest.put(
+                Routes.applicationCommands(process.env.APP_ID),
+                { body: commands },
+            )
+        }
 
         console.log('Successfully reloaded application (/) commands.');
     } catch (error) {
