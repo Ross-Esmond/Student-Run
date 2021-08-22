@@ -156,7 +156,8 @@ async function syncChannels (guild) {
         classHeader = await guild.roles.create({
             name: '---------------Classes----------------',
             color: '#2f3136',
-            reasion: 'classes marker didn\'t exist'
+            reasion: 'classes marker didn\'t exist',
+            position: manager.position - 1
         })
     }
     for (let myClass of classes) {
@@ -310,17 +311,31 @@ async function handleButtonInteraction (interaction) {
     if (role != null) {
         const hasRole = interaction.member.roles.cache.has(role.id)
         if (hasRole) {
-            await interaction.member.roles.remove(role)
-            await interaction.reply({
-                content: `You have been removed from ${role.name}.`,
-                ephemeral: true
-            })
+            try {
+                await interaction.member.roles.remove(role)
+                await interaction.reply({
+                    content: `You have been removed from ${role.name}.`,
+                    ephemeral: true
+                })
+            } catch (er) {
+                await interaction.reply({
+                    content: `Failed to remove you from ${role.name}. Likely due to a misplaced Student-Run Bot role.`,
+                    ephemeral: true
+                })
+            }
         } else {
-            await interaction.member.roles.add(role)
-            await interaction.reply({
-                content: `Welcome to ${role.name}.`,
-                ephemeral: true
-            })
+            try {
+                await interaction.member.roles.add(role)
+                await interaction.reply({
+                    content: `Welcome to ${role.name}.`,
+                    ephemeral: true
+                })
+            } catch (er) {
+                await interaction.reply({
+                    content: `Failed to add you to ${role.name}. Likely due to a misplaced Student-Run Bot role.`,
+                    ephemeral: true
+                })
+            }
         }
     } else {
         await interaction.reply({
