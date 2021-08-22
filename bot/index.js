@@ -149,7 +149,7 @@ async function syncChannels (guild) {
 
     const rolesByName = Array.from((await guild.roles.fetch()).values())
         .reduce((m, r) => { m.set(r.name, r); return m }, new Map())
-    const classHeader = rolesByName.get('---------------Classes----------------')
+    let classHeader = rolesByName.get('---------------Classes----------------')
     if (classHeader == null) {
         classHeader = await guild.roles.create({
             name: '---------------Classes----------------',
