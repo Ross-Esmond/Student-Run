@@ -240,14 +240,10 @@ async function syncChannels (guild) {
 
 
     const header = Array.from((await registration.messages.fetch()).values())
-        .find(m => m.embeds?.[0]?.title === 'Class Channel Access')
+        .find(m => m.content.startsWith('**Class Channel Access**'))
     if (header == null) {
-        const embed = new MessageEmbed()
-            .setColor(colorGen.next().value)
-            .setTitle('Class Channel Access')
-            .setDescription('React to the following in order to gain access to class channels!')
         await registration.send({
-            embeds: [embed]
+            content: '**Class Channel Access**\r\nThe following buttons **toggle** access to a class.'
         })
     }
 
@@ -256,34 +252,51 @@ async function syncChannels (guild) {
             .map(c => c.name)
             .filter(n => /^[a-z]{4}-(\d)\d{3}$/.exec(n)?.[1] === level.toString())
             .sort()
-        if (levelClasses.length !== 0) {
-            const title = `**${level}000 Level Courses**`
-            const existing = Array.from((await registration.messages.fetch()).values())
-                .find(m => m.content.startsWith(title))
-            const message = {
-                content: title,
-                components: levelClasses.reduce((res, c) => {
-                    if (res[res.length - 1].components.length === 5) {
-                        res.push({
-                            type: 1,
-                            components: []
-                        })
-                    }
-                    res[res.length - 1].components.push({
-                        type: 2,
-                        label: c.toUpperCase(),
-                        style: 1,
-                        custom_id: c
-                    })
-                    return res
-                }, [{ type: 1, components: [] }])
-            }
-            if (existing == null) {
-                await registration.send(message)
-            } else {
-                await existing.edit(message)
-            }
+        const title = `**${level}000 Level Courses**`
+        const existing = Array.from((await registration.messages.fetch()).values())
+            .find(m => m.content.startsWith(title))
+        let message = {
+            content: title
         }
+        if (levelClasses.length !== 0) {
+            message.components = levelClasses.reduce((res, c) => {
+                if (res[res.length - 1].components.length === 5) {
+                    res.push({
+                        type: 1,
+                        components: []
+                    })
+                }
+                res[res.length - 1].components.push({
+                    type: 2,
+                    label: c.toUpperCase(),
+                    style: 1,
+                    custom_id: c
+                })
+                return res
+            }, [{ type: 1, components: [] }])
+        }
+        if (existing == null) {
+            await registration.send(message)
+        } else {
+            await existing.edit(message)
+        }
+    }
+
+    const removalBar = (await realize(registration.messages))
+        .find(m => m.content.startsWith('**Remove Classes**'))
+    if (removalBar == null) {
+        await registration.send({
+            content: '**Remove Classes**\r\n',
+            components: [{
+                type: 1,
+                components: [{
+                    type: 2,
+                    label: 'Open Dialogue',
+                    style: 1,
+                    custom_id: 'class_removal'
+                }]
+            }]
+        })
     }
 }
 
@@ -304,7 +317,59 @@ async function classCommand (command, interaction, handler) {
     }
 }
 
+let removalReplies = new Map()
+
 async function handleButtonInteraction (interaction) {
+    if (interaction.customId === 'class_removal') {
+        const memberRolls = interaction.member.roles.cache
+            .filter(r => /^([a-z]){4}-\d{4}$/.test(r.name))
+        if (Array.from(memberRolls).length === 0) {
+            await interaction.reply({
+                content: 'You\'re not in any classes dingaling.',
+                ephemeral: true
+            })
+        } else {
+            removalReplies.set(
+                interaction.member.id, [ memberRolls, interaction ])
+            await interaction.reply({
+                content: 'Which classes would you like to hide?',
+                ephemeral: true,
+                components: [{
+                    type: 1,
+                    components: memberRolls.map(r => ({
+                        type: 2,
+                        label: r.name,
+                        style: 1,
+                        custom_id: `remove_class_${r.id}`
+                    }))
+                }]
+            })
+        }
+        return
+    } else if (interaction.customId.startsWith('remove_class_')) {
+        const memberRolls = interaction.member.roles.cache
+            .filter(r => /^([a-z]){4}-\d{4}$/.test(r.name))
+        const target = /^remove_class_(.+)$/.exec(interaction.customId)?.[1]
+        if (removalReplies.has(interaction.member.id)) {
+            await interaction.member.roles.remove(target)
+            const savedReply = removalReplies.get(interaction.member.id)
+            await interaction.update({
+                content: 'Which classes would you like to hide?',
+                components: [{
+                    type: 1,
+                    components: savedReply[0].map(r => ({
+                        type: 2,
+                        label: r.name,
+                        style: 1,
+                        custom_id: `remove_class_${r.id}`,
+                        disabled: !memberRolls.some(mr => mr.id === r.id) || target === r.id
+                    }))
+                }]
+            })
+        }
+        return
+    }
+
     const role = (await realize(interaction.guild.roles))
         .find(r => r.name === interaction.customId)
 
