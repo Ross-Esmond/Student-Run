@@ -10,47 +10,7 @@ const sequelize = new Sequelize({
     storage: "./sq.db"
 })
 
-class Class extends Model {}
-Class.init({
-    name: DataTypes.STRING,
-    guild: DataTypes.STRING
-}, { sequelize, modelName: 'class' })
-class ClassChannel extends Model {}
-ClassChannel.init({
-    name: DataTypes.STRING,
-    guild: DataTypes.STRING
-}, { sequelize, modelName: 'class-channel' })
-
-;(async () => {
-    await sequelize.sync()
-    console.log('sql synced')
-})()
-
-const commands = [
-    {
-        name: 'new-class',
-        description: '`/new-class stat-3011` adds a new stat class',
-        options: [
-            {
-                name: 'name',
-                description: 'In the form of `math-1001`',
-                type: 3,
-                required: true
-            }
-        ]
-    },
-    {
-        name: 'forget-class',
-        description: 'class-manager will stop managing class channels',
-        options: [
-            {
-                name: 'name',
-                description: 'In the form of `math-1001`',
-                type: 3,
-                required: true
-            }
-        ]
-    },
+let commands = [
     {
         name: 'setup-classes',
         description: 'Sets up class channels.',
@@ -102,6 +62,105 @@ const commands = [
         ]
     }]
 
+let commandHandlers = new Map()
+async function addState (name, attrs) {
+    class Class extends Model {}
+    Class.init({
+        ...attrs,
+        guild: DataTypes.STRING
+    }, { sequelize, modelName: name })
+
+    const nextCommands = [
+        {
+            name: `new-${name}`,
+            description: `Adds a new ${name}.`,
+            options: Object.entries(attrs).map(([key, value]) => ({
+                name: key,
+                description: `The ${key} value for ${name}.`,
+                type: value === DataTypes.STRING ? 3 : (() => { throw "type not supported" })(),
+                required: true
+            }))
+        },
+        {
+            name: `forget-${name}`,
+            description: `Remove a ${name} from SRC Bot. Channels will not be deleted.`,
+            options: Object.entries(attrs).map(([key, value]) => ({
+                name: key,
+                description: `The ${key} value for ${name}.`,
+                type: value === DataTypes.STRING ? 3 : (() => { throw "type not supported" })(),
+                required: true
+            }))
+        }
+    ]
+
+    commands = commands.concat(nextCommands)
+
+    function generalHandler (command, handler) {
+        return async (interaction) => {
+            if (interaction.commandName === command) {
+                if (interaction.member.roles.cache.some(r => r.name === "Verified")) {
+                    const values = Object.fromEntries(Object.entries(attrs).map(([key, type]) => {
+                        if (type !== DataTypes.STRING) throw "type not supported"
+                        return [key, interaction.options.getString(key)]
+                    }))
+                    console.log(values)
+                    const current = await Class.findAll({ where: {
+                        guild: interaction.guild.id,
+                        ...values
+                    }})
+                    await handler(values, current, interaction)
+                    await syncChannels(interaction.guild)
+                } else {
+                    await interaction.reply('Sorry, you must be Verified to use this command.')
+                }
+            } else {
+                await interaction.reply('Something went wrong.')
+                console.error(`${interaction.commandName} was sent to ${command} handler.`)
+            }
+        }
+    }
+
+    commandHandlers.set(`new-${name}`,
+        generalHandler(`new-${name}`,
+            async function (inputs, current, interaction) {
+                if (current.length !== 0) {
+                    await interaction.reply(`${name} already exists.`)
+                } else {
+                    const next = Class.build({
+                        guild: interaction.guild.id,
+                        ...inputs
+                    })
+                    await next.save()
+                    await interaction.reply(`Added ${name}.`)
+                }
+            }))
+
+    commandHandlers.set(`forget-${name}`,
+        generalHandler(`forget-${name}`,
+            async function (inputs, current, interaction) {
+                if (current.length !== 0) {
+                    await current[0].destroy()
+                    await interaction.reply(`Removed ${name}.`)
+                } else {
+                    await interaction.reply(`${name} does not exist.`)
+                }
+            }))
+
+    return Class
+}
+
+let Class
+class ClassChannel extends Model {}
+ClassChannel.init({
+    name: DataTypes.STRING,
+    guild: DataTypes.STRING
+}, { sequelize, modelName: 'class-channel' })
+
+;(async () => {
+    await sequelize.sync()
+    console.log('sql synced')
+})()
+
 async function realize (thang) {
     return Array.from((await thang.fetch()).values())
 }
@@ -111,6 +170,8 @@ const rest = new REST({ version: '9' }).setToken(process.env.BOT_TOKEN);
 (async () => {
     try {
         console.log('Started refreshing application (/) commands.');
+
+        Class = await addState('class', { name: DataTypes.STRING })
 
         if (process.env.GUILD_ID) {
             console.log('Loading commands to specific Guild for development.')
@@ -142,7 +203,7 @@ async function getChannels (guild) {
 
 async function syncChannels (guild) {
     const everyone = guild.roles.cache.find(r => r.name === '@everyone')
-    const manager = guild.roles.cache.find(r => r.name === 'Student-Run Bot')
+    const manager = guild.roles.cache.find(r => r.name.startsWith('Student-Run Bot'))
     const classes = await Class.findAll({ where: { guild: guild.id } })
     const channels = await ClassChannel.findAll({ where: { guild: guild.id } })
     const categories = new Set(Array.from((await guild.channels.fetch()).values())
@@ -415,6 +476,10 @@ client.on('interactionCreate', async interaction => {
 
     if (!interaction.isCommand()) return;
 
+    if (commandHandlers.has(interaction.commandName)) {
+        await commandHandlers.get(interaction.commandName)(interaction)
+    }
+
     if (interaction.commandName === 'setup-classes') {
         if (interaction.member.permissions.any('MANAGE_CHANNELS')) {
             await interaction.reply('Spinning up channels.')
@@ -451,27 +516,6 @@ client.on('interactionCreate', async interaction => {
             }
         }
     }
-
-    await classCommand('new-class', interaction, async (name, current) => {
-        if (current.length !== 0) {
-            await interaction.reply(`${name} already exists.`)
-        } else {
-            await interaction.reply('Coming right up!')
-
-            const nextClass = Class.build({ name: interaction.options.getString('name'), guild: interaction.guild.id })
-            await nextClass.save()
-        }
-    })
-
-    await classCommand('forget-class', interaction, async (name, current) => {
-        if (current.length === 0) {
-            await interaction.reply(`${name} does not exist.`)
-        } else {
-            await interaction.reply(`${name} who?`)
-
-            await current[0].destroy()
-        }
-    })
 
     if (interaction.commandName === 'clean') {
         if (interaction.member.permissions.any('MANAGE_CHANNELS')) {
