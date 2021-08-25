@@ -90,6 +90,10 @@ async function addState (name, attrs) {
                 type: value === DataTypes.STRING ? 3 : (() => { throw "type not supported" })(),
                 required: true
             }))
+        },
+        {
+            name: `${name}-list`,
+            description: `List all ${name} entries.`
         }
     ]
 
@@ -145,6 +149,13 @@ async function addState (name, attrs) {
                     await interaction.reply(`${name} does not exist.`)
                 }
             }))
+
+    commandHandlers.set(`${name}-list`,
+        async function (interaction) {
+            const all = await Class.findAll()
+            const tell = all.map(a => a.dataValues).map(d => `[${Object.keys(attrs).map(k => d[k]).join(',')}]`).join(', ')
+            await interaction.reply(tell)
+        })
 
     return Class
 }
