@@ -250,7 +250,7 @@ async function syncChannels (guild) {
     for (let level of [1, 2, 3, 4, 5, 8]) {
         const levelClasses = classes
             .map(c => c.name)
-            .filter(n => /^[a-z]{4}-(\d)\d{3}$/.exec(n)?.[1] === level.toString())
+            .filter(n => /^[a-z]{2,4}-(\d)\d{3}$/.exec(n)?.[1] === level.toString())
             .sort()
         const title = `**${level}000 Level Courses**`
         const existing = Array.from((await registration.messages.fetch()).values())
@@ -304,7 +304,7 @@ async function classCommand (command, interaction, handler) {
     if (interaction.commandName === command) {
         if (interaction.member.roles.cache.some(r => r.name === "Verified")) {
             const name = interaction.options.getString('name')
-            if (/^([a-z]){4}-\d{4}$/.test(name)) {
+            if (/^([a-z]){2,4}-\d{4}$/.test(name)) {
                 const current = await Class.findAll({ where: { guild: interaction.guild.id, name } })
                 await handler(name, current)
                 await syncChannels(interaction.guild)
@@ -322,7 +322,7 @@ let removalReplies = new Map()
 async function handleButtonInteraction (interaction) {
     if (interaction.customId === 'class_removal') {
         const memberRolls = interaction.member.roles.cache
-            .filter(r => /^([a-z]){4}-\d{4}$/.test(r.name))
+            .filter(r => /^([a-z]){2,4}-\d{4}$/.test(r.name))
         if (Array.from(memberRolls).length === 0) {
             await interaction.reply({
                 content: 'You\'re not in any classes dingaling.',
@@ -348,7 +348,7 @@ async function handleButtonInteraction (interaction) {
         return
     } else if (interaction.customId.startsWith('remove_class_')) {
         const memberRolls = interaction.member.roles.cache
-            .filter(r => /^([a-z]){4}-\d{4}$/.test(r.name))
+            .filter(r => /^([a-z]){2,4}-\d{4}$/.test(r.name))
         const target = /^remove_class_(.+)$/.exec(interaction.customId)?.[1]
         if (removalReplies.has(interaction.member.id)) {
             await interaction.member.roles.remove(target)
