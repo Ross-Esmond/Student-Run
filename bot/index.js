@@ -16,30 +16,6 @@ let commands = [
         description: 'Sets up class channels.',
     },
     {
-        name: 'new-class-channel',
-        description: 'adds a new channel to every class category',
-        options: [
-            {
-                name: 'name',
-                description: 'The name of the channel: `hw-help`',
-                type: 3,
-                required: true
-            }
-        ]
-    },
-    {
-        name: 'forget-class-channel',
-        description: 'forgets a class channel',
-        options: [
-            {
-                name: 'name',
-                description: 'The name of the channel: `hw-help`',
-                type: 3,
-                required: true
-            }
-        ]
-    },
-    {
         name: 'clean',
         description: 'deletes empty channels',
         options: [
@@ -102,7 +78,7 @@ async function addState (name, attrs) {
     function generalHandler (command, handler) {
         return async (interaction) => {
             if (interaction.commandName === command) {
-                if (interaction.member.roles.cache.some(r => r.name === "Verified")) {
+                if (interaction.member.permissions.any('ADMINISTRATOR')) {
                     const values = Object.fromEntries(Object.entries(attrs).map(([key, type]) => {
                         if (type !== DataTypes.STRING) throw "type not supported"
                         return [key, interaction.options.getString(key)]
@@ -161,11 +137,7 @@ async function addState (name, attrs) {
 }
 
 let Class
-class ClassChannel extends Model {}
-ClassChannel.init({
-    name: DataTypes.STRING,
-    guild: DataTypes.STRING
-}, { sequelize, modelName: 'class-channel' })
+let ClassChannel
 
 ;(async () => {
     await sequelize.sync()
@@ -183,6 +155,7 @@ const rest = new REST({ version: '9' }).setToken(process.env.BOT_TOKEN);
         console.log('Started refreshing application (/) commands.');
 
         Class = await addState('class', { name: DataTypes.STRING })
+        ClassChannel = await addState('class-channel', { name: DataTypes.STRING })
 
         if (process.env.GUILD_ID) {
             console.log('Loading commands to specific Guild for development.')
@@ -495,36 +468,6 @@ client.on('interactionCreate', async interaction => {
         if (interaction.member.permissions.any('MANAGE_CHANNELS')) {
             await interaction.reply('Spinning up channels.')
             await syncChannels(interaction.guild)
-        }
-    }
-
-    if (interaction.commandName === 'new-class-channel') {
-        if (interaction.member.permissions.any('MANAGE_CHANNELS')) {
-            const name = interaction.options.getString('name')
-            const current = await ClassChannel.findAll({ where: { guild: interaction.guild.id, name } })
-            if (current.length !== 0) {
-                await interaction.reply(`The channel ${name} already exists.`)
-            } else {
-                await interaction.reply(`Adding ${name} channel to all classes.`)
-
-                const nextChannel = ClassChannel.build({ name, guild: interaction.guild.id })
-                await nextChannel.save()
-
-                await syncChannels(interaction.guild)
-            }
-        }
-    }
-
-    if (interaction.commandName === 'forget-class-channel') {
-        if (interaction.member.permissions.any('MANAGE_CHANNELS')) {
-            const name = interaction.options.getString('name')
-            const current = await ClassChannel.findAll({ where: { guild: interaction.guild.id, name } })
-            if (current.length !== 0) {
-                await interaction.reply(`${name} who?`)
-                await current[0].destroy()
-            } else {
-                await interaction.reply(`${name} is not currently a class channel.`)
-            }
         }
     }
 
