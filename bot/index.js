@@ -41,19 +41,26 @@ let commands = [
 let commandHandlers = new Map()
 async function addState (name, attrs) {
     class Class extends Model {}
-    Class.init({
-        ...attrs,
-        guild: DataTypes.STRING
-    }, { sequelize, modelName: name })
 
-    const nextCommands = [
+    const getType = value => {
+        if (value === DataTypes.STRING || value.type === DataTypes.STRING) {
+            return 'string'
+        } else {
+            throw 'type not supported'
+        }
+    }
+
+    const attrTypes = Object.fromEntries(Object.entries(attrs).map(([k, v]) => [k, getType(v)]))
+    const primaryKey = Object.entries(attrs).find(([k, v]) => v?.primaryKey === true)?.[0]
+
+    let nextCommands = [
         {
             name: `new-${name}`,
             description: `Adds a new ${name}.`,
             options: Object.entries(attrs).map(([key, value]) => ({
                 name: key,
                 description: `The ${key} value for ${name}.`,
-                type: value === DataTypes.STRING ? 3 : (() => { throw "type not supported" })(),
+                type: getType(value) === 'string' ? 3 : null,
                 required: true
             }))
         },
@@ -63,7 +70,7 @@ async function addState (name, attrs) {
             options: Object.entries(attrs).map(([key, value]) => ({
                 name: key,
                 description: `The ${key} value for ${name}.`,
-                type: value === DataTypes.STRING ? 3 : (() => { throw "type not supported" })(),
+                type: getType(value) === 'string' ? 3 : null,
                 required: true
             }))
         },
@@ -73,21 +80,54 @@ async function addState (name, attrs) {
         }
     ]
 
+    const isPrimary = attr => attr?.primaryKey === true
+
+    if (Object.values(attrs).some(isPrimary)) {
+        nextCommands.push({
+            name: `update-${name}`,
+            description: `Update the attributes of some ${name}.`,
+            options: Object.entries(attrs).map(([key, value]) => {
+                if (isPrimary(value)) {
+                    return {
+                        name: key,
+                        description: `The ${name} to change.`,
+                        type: getType(value) === 'string' ? 3 : null,
+                        required: true
+                    }
+                } else {
+                    return {
+                        name: key,
+                        description: `Change ${key} for ${name}.`,
+                        type: getType(value) === 'string' ? 3 : null
+                    }
+                }
+            })
+        })
+    }
+
     commands = commands.concat(nextCommands)
 
     function generalHandler (command, handler) {
         return async (interaction) => {
             if (interaction.commandName === command) {
                 if (interaction.member.permissions.any('ADMINISTRATOR')) {
-                    const values = Object.fromEntries(Object.entries(attrs).map(([key, type]) => {
-                        if (type !== DataTypes.STRING) throw "type not supported"
-                        return [key, interaction.options.getString(key)]
-                    }))
-                    console.log(values)
-                    const current = await Class.findAll({ where: {
-                        guild: interaction.guild.id,
-                        ...values
-                    }})
+                    const values = Object.fromEntries(
+                        Object.entries(attrTypes).map(([key, type]) => {
+                            return [key, interaction.options.getString(key)]
+                        })
+                        .filter(([key, type]) => type != null))
+                    let current
+                    if (primaryKey != null) {
+                        current = await Class.findAll({ where: {
+                            guild: interaction.guild.id,
+                            [primaryKey]: values[primaryKey]
+                        }})
+                    } else {
+                        current = await Class.findAll({ where: {
+                            guild: interaction.guild.id,
+                            ...values
+                        }})
+                    }
                     await handler(values, current, interaction)
                     await syncServers(interaction.guild)
                 } else {
@@ -115,6 +155,21 @@ async function addState (name, attrs) {
                 }
             }))
 
+    commandHandlers.set(`update-${name}`,
+        generalHandler(`update-${name}`,
+            async function (inputs, current, interaction) {
+                if (current.length === 0) {
+                    await interaction.reply(`Couldn't find ${name}.`)
+                } else {
+                    Object.entries(inputs)
+                        .forEach(([key, value]) => {
+                            current[0][key] = value
+                        })
+                    current[0].save()
+                    await interaction.reply(`Updated ${name}.`)
+                }
+            }))
+
     commandHandlers.set(`forget-${name}`,
         generalHandler(`forget-${name}`,
             async function (inputs, current, interaction) {
@@ -133,6 +188,11 @@ async function addState (name, attrs) {
             await interaction.reply(tell || "None found.")
         })
 
+    Class.init({
+        ...attrs,
+        guild: DataTypes.STRING
+    }, { sequelize, modelName: name })
+
     return Class
 }
 
@@ -150,7 +210,13 @@ const rest = new REST({ version: '9' }).setToken(process.env.BOT_TOKEN);
     try {
         console.log('Started refreshing application (/) commands.');
 
-        Class = await addState('class', { name: DataTypes.STRING })
+        Class = await addState('class', {
+            name: {
+                type: DataTypes.STRING,
+                primaryKey: true
+            },
+            label: DataTypes.STRING
+        })
         ClassChannel = await addState('class-channel', { name: DataTypes.STRING })
         Instructor = await addState('instructor', { 'class-name': DataTypes.STRING, 'instructor': DataTypes.STRING })
 
