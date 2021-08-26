@@ -89,7 +89,7 @@ async function addState (name, attrs) {
                         ...values
                     }})
                     await handler(values, current, interaction)
-                    await syncChannels(interaction.guild)
+                    await syncServers(interaction.guild)
                 } else {
                     await interaction.reply('Sorry, you must be Verified to use this command.')
                 }
@@ -130,7 +130,7 @@ async function addState (name, attrs) {
         async function (interaction) {
             const all = await Class.findAll()
             const tell = all.map(a => a.dataValues).map(d => `[${Object.keys(attrs).map(k => d[k]).join(',')}]`).join(', ')
-            await interaction.reply(tell)
+            await interaction.reply(tell || "None found.")
         })
 
     return Class
@@ -138,11 +138,7 @@ async function addState (name, attrs) {
 
 let Class
 let ClassChannel
-
-;(async () => {
-    await sequelize.sync()
-    console.log('sql synced')
-})()
+let Instructor
 
 async function realize (thang) {
     return Array.from((await thang.fetch()).values())
@@ -156,6 +152,12 @@ const rest = new REST({ version: '9' }).setToken(process.env.BOT_TOKEN);
 
         Class = await addState('class', { name: DataTypes.STRING })
         ClassChannel = await addState('class-channel', { name: DataTypes.STRING })
+        Instructor = await addState('instructor', { 'class-name': DataTypes.STRING, 'instructor': DataTypes.STRING })
+
+        ;(async () => {
+            await sequelize.sync()
+            console.log('sql synced')
+        })()
 
         if (process.env.GUILD_ID) {
             console.log('Loading commands to specific Guild for development.')
@@ -185,11 +187,12 @@ async function getChannels (guild) {
     return Array.from((await guild.channels.fetch()).values())
 }
 
-async function syncChannels (guild) {
+async function syncServers (guild) {
     const everyone = guild.roles.cache.find(r => r.name === '@everyone')
     const manager = guild.roles.cache.find(r => r.name.startsWith('Student-Run Bot'))
     const classes = await Class.findAll({ where: { guild: guild.id } })
     const channels = await ClassChannel.findAll({ where: { guild: guild.id } })
+    const instructors = await Instructor.findAll({ where: { guild: guild.id } })
     const categories = new Set(Array.from((await guild.channels.fetch()).values())
         .filter(c => c.type === 'GUILD_CATEGORY')
         .map(c => c.name))
@@ -257,6 +260,15 @@ async function syncChannels (guild) {
                     parent: nextCategories.get(myClass.name.toUpperCase())
                 })
             }
+        }
+    }
+
+    for (let insr of instructors) {
+        const channelName = `${insr.instructor}-${insr['class-name']}`
+        if (!existing.has(channelName)) {
+            await guild.channels.create(channelName, {
+                parent: nextCategories.get(insr['class-name'].toUpperCase())
+            })
         }
     }
 
@@ -352,7 +364,7 @@ async function classCommand (command, interaction, handler) {
             if (/^([a-z]){2,4}-\d{4}$/.test(name)) {
                 const current = await Class.findAll({ where: { guild: interaction.guild.id, name } })
                 await handler(name, current)
-                await syncChannels(interaction.guild)
+                await syncServers(interaction.guild)
             } else {
                 await interaction.reply('Class must be formatted like subj-1234.')
             }
@@ -467,7 +479,7 @@ client.on('interactionCreate', async interaction => {
     if (interaction.commandName === 'setup-classes') {
         if (interaction.member.permissions.any('MANAGE_CHANNELS')) {
             await interaction.reply('Spinning up channels.')
-            await syncChannels(interaction.guild)
+            await syncServers(interaction.guild)
         }
     }
 
