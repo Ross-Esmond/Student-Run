@@ -5,7 +5,15 @@ const { Routes } = require('discord-api-types/v9')
 const { Client, Intents, MessageEmbed } = require('discord.js')
 const { Sequelize, Model, DataTypes } = require('sequelize')
 const Fuse = require('fuse.js')
-const client = new Client({ intents: [Intents.FLAGS.GUILDS, Intents.FLAGS.GUILD_MESSAGES] })
+const client = new Client({
+    intents: [
+        Intents.FLAGS.GUILDS,
+        Intents.FLAGS.GUILD_MESSAGES,
+        Intents.FLAGS.GUILD_INVITES,
+        Intents.FLAGS.GUILD_PRESENCES,
+        Intents.FLAGS.GUILD_MEMBERS
+    ]
+})
 const sequelize = new Sequelize({
     dialect: "sqlite",
     storage: "./sq.db"
@@ -52,6 +60,13 @@ let commands = [
         ]
     },
 ]
+
+class Invite extends Model {}
+Invite.init({
+    guild: DataTypes.STRING,
+    count: DataTypes.INTEGER,
+    code: DataTypes.STRING
+}, { sequelize, modelName: 'invite' })
 
 let commandHandlers = new Map()
 async function addState (name, attrs) {
@@ -264,8 +279,84 @@ const rest = new REST({ version: '9' }).setToken(process.env.BOT_TOKEN);
     }
 })()
 
+client.on('inviteCreate', async invite => {
+    await Invite.create({
+        guild: invite.guild.id,
+        code: invite.code,
+        count: invite.uses
+    })
+})
+
+client.on('guildMemberAdd', async member => {
+    const next = await realize(member.guild.invites)
+    const prior = await Invite.findAll({ where: { guild: member.guild.id } })
+
+    let candidates = []
+    for (const n of next) {
+        const p = prior.find(p => p.code === n.code)
+        if (p.count === n.uses - 1) {
+            candidates.push(n)
+        }
+    }
+    if (candidates.length === 1) {
+        const channel = candidates[0].channel
+        if (channel.parentId != null) {
+            const category = member.guild.channels.cache.get(channel.parentId)
+            if (/^[A-Z]{2,4}-\d{4}$/.test(category.name)) {
+                const role = (await realize(member.guild.roles))
+                    .find(r => r.name === category.name.toLowerCase())
+                member.roles.add(role)
+            }
+        }
+    }
+
+    checkInvitesLoop()
+})
+
+let nextInviteCheck = null
+async function checkInvitesLoop () {
+    try {
+        clearTimeout(nextInviteCheck)
+
+        await checkInvites()
+    } catch (e) {
+        console.error(`checkInvites failed with ${e}`)
+    } finally {
+        nextInviteCheck = setTimeout(checkInvitesLoop, 1000*60*5)
+    }
+}
+async function checkInvites () {
+    const guilds = await realize(client.guilds)
+    let invites = []
+    for (let g of guilds) {
+        const guild = await g.fetch()
+        let gi = await realize(guild.invites)
+        invites = invites.concat(gi)
+    }
+
+    for (let invite of invites) {
+        let saved = await Invite.findOne({
+            where: {
+                guild: invite.guild.id,
+                code: invite.code
+            }
+        })
+        if (saved == null) {
+            await Invite.create({
+                guild: invite.guild.id,
+                code: invite.code,
+                count: invite.uses
+            })
+        } else if (saved.count !== invite.uses) {
+            saved.count = invite.uses
+            await saved.save()
+        }
+    }
+}
+
 client.on('ready', () => {
     console.log(`Logged in as ${client.user.tag}!`);
+    checkInvitesLoop()
 })
 
 async function getChannels (guild) {
@@ -387,6 +478,10 @@ async function runSyncServers (guild, log) {
                     {
                         id: postRolesByName.get(myClass.name),
                         allow: ['VIEW_CHANNEL']
+                    },
+                    {
+                        id: manager,
+                        allow: ['MANAGE_CHANNELS']
                     }
                 ]
             })
