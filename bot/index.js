@@ -144,7 +144,11 @@ async function addState (name, attrs) {
                         }})
                     }
                     await handler(values, current, interaction)
-                    await syncServers(interaction.guild)
+                    try {
+                        await syncServers(interaction.guild)
+                    } catch (e) {
+                        console.log(`sync failed with ${e.message} during ${interaction.commandName}`)
+                    }
                 } else {
                     await interaction.reply('Sorry, you must be Verified to use this command.')
                 }
@@ -268,16 +272,37 @@ async function getChannels (guild) {
     return Array.from((await guild.channels.fetch()).values())
 }
 
-async function syncServers (guild) {
+async function syncServers (guild, interaction = null) {
+    let loglist = ''
+    const log = string => {
+        loglist += `${string}...\r\n`
+        interaction != null ? interaction.editReply(loglist) : Promise.resolve()
+    }
+
+    try {
+        await runSyncServers(guild, log)
+    } catch (e) {
+        console.error(e.message)
+        await log(`ERROR: ${e.message}`)
+        throw e
+    }
+}
+
+async function runSyncServers (guild, log) {
     const everyone = guild.roles.cache.find(r => r.name === '@everyone')
     const manager = guild.roles.cache.find(r => r.name.startsWith('Student-Run Bot'))
+    await log('looking for classes')
     const classes = await Class.findAll({ where: { guild: guild.id } })
+    await log('looking for channels')
     const channels = await ClassChannel.findAll({ where: { guild: guild.id } })
+    await log('looking for instructors')
     const instructors = await Instructor.findAll({ where: { guild: guild.id } })
+    await log('fetching guild categories')
     const categories = new Set(Array.from((await guild.channels.fetch()).values())
         .filter(c => c.type === 'GUILD_CATEGORY')
         .map(c => c.name))
 
+    await log('creating search index')
     classIndex.set(
         guild.id,
         new Fuse(
@@ -288,10 +313,12 @@ async function syncServers (guild) {
                 threshold: 0.5
             }))
 
+    await log('fetching guild roles')
     const rolesByName = Array.from((await guild.roles.fetch()).values())
         .reduce((m, r) => { m.set(r.name, r); return m }, new Map())
     let classHeader = rolesByName.get('---------------Classes----------------')
     if (classHeader == null) {
+        await log('creating class header')
         classHeader = await guild.roles.create({
             name: '---------------Classes----------------',
             color: '#2f3136',
@@ -299,6 +326,7 @@ async function syncServers (guild) {
             position: manager.position - 1
         })
     }
+    await log('creating class roles')
     for (let myClass of classes) {
         let role = rolesByName.get(myClass.name)
         if (role == null) {
@@ -309,9 +337,15 @@ async function syncServers (guild) {
         }
     }
     const postRolesByName = Array.from((await guild.roles.fetch()).values())
-        .reduce((m, r) => { m.set(r.name, r); return m }, new Map())
+        .reduce(
+            (m, r) => {
+                if (m.has(r.name)) throw new Error(`Multiple ${r.name} role found.`)
+                m.set(r.name, r); return m
+            },
+            new Map())
     const sortedClasses = classes.map(c => c.name).sort().reverse()
     let pos = classHeader.position
+    await log('sorting class roles')
     for (let className of sortedClasses) {
         try {
             await postRolesByName.get(className).setPosition(pos - 1)
@@ -320,6 +354,7 @@ async function syncServers (guild) {
         }
     }
 
+    await log('creating class categories')
     for (let myClass of classes) {
         const allCap = myClass.name.toUpperCase()
         if (!categories.has(allCap)) {
@@ -343,6 +378,7 @@ async function syncServers (guild) {
     const nextCategories = Array.from((await guild.channels.fetch()).values())
         .reduce((map, obj) => map.set(obj.name, obj), new Map())
 
+    await log('creating class channels')
     for (let myClass of classes) {
         for (let channel of channels) {
             const channelName = `${channel.name}-${myClass.name}`
@@ -354,6 +390,7 @@ async function syncServers (guild) {
         }
     }
 
+    await log('creating instructor channels')
     for (let insr of instructors) {
         const channelName = `${insr.instructor}-${insr['class-name']}`
         if (!existing.has(channelName)) {
@@ -363,8 +400,10 @@ async function syncServers (guild) {
         }
     }
 
+    await log('fetching class-registration channel')
     let registration = (await getChannels(guild)).find(c => c.name === 'class-registration')
     if (registration == null) {
+        await log('creating class-registration channel')
         registration = await guild.channels.create('class-registration', {
             permissionOverwrites: [
                 {
@@ -379,14 +418,7 @@ async function syncServers (guild) {
         })
     }
 
-    const colorGen = (function* () {
-        while (true) {
-            yield '#6A0606'
-            yield '#E6B60A'
-        }
-    })()
-
-
+    await log('posting class-registration comments')
     const header = Array.from((await registration.messages.fetch()).values())
         .find(m => m.content.startsWith('**Class Channel Access**'))
     if (header == null) {
@@ -455,7 +487,11 @@ async function classCommand (command, interaction, handler) {
             if (/^([a-z]){2,4}-\d{4}$/.test(name)) {
                 const current = await Class.findAll({ where: { guild: interaction.guild.id, name } })
                 await handler(name, current)
-                await syncServers(interaction.guild)
+                try {
+                    await syncServers(interaction.guild)
+                } catch (e) {
+                    console.error(`sync failed with ${e.message} during class command ${command}`)
+                }
             } else {
                 await interaction.reply('Class must be formatted like subj-1234.')
             }
@@ -564,6 +600,18 @@ async function handleButtonInteraction (interaction) {
 }
 
 client.on('interactionCreate', async interaction => {
+    try {
+        return await interactionHandler(interaction)
+    } catch (e) {
+        if (interaction.replied) {
+            interaction.followUp('Something went wrong.')
+        } else {
+            interaction.reply('Something went wrong.')
+        }
+        console.error(e)
+    }
+})
+async function interactionHandler (interaction) {
     if (interaction.isButton()) return await handleButtonInteraction(interaction)
 
     if (!interaction.isCommand()) return;
@@ -627,8 +675,13 @@ client.on('interactionCreate', async interaction => {
 
     if (interaction.commandName === 'setup-classes') {
         if (interaction.member.permissions.any('MANAGE_CHANNELS')) {
-            await interaction.reply('Spinning up channels.')
-            await syncServers(interaction.guild)
+            await interaction.deferReply()
+            try {
+                await syncServers(interaction.guild, interaction)
+                await interaction.editReply('Classes are ready.')
+            } catch (e) {
+                await interaction.followUp('Class setup failed.')
+            }
         }
     }
 
@@ -675,6 +728,6 @@ client.on('interactionCreate', async interaction => {
             }
         }
     }
-})
+}
 
 client.login(process.env.BOT_TOKEN)
