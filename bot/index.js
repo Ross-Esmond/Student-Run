@@ -429,27 +429,28 @@ async function runSyncServers (guild, log) {
 
     for (let level of [1, 2, 3, 4, 5, 8]) {
         const levelClasses = classes
-            .map(c => c.name)
-            .filter(n => /^[a-z]{2,4}-(\d)\d{3}$/.exec(n)?.[1] === level.toString())
-            .sort()
+            .map(c => [c.name, c.label])
+            .filter(([n, _]) => /^[a-z]{2,4}-(\d)\d{3}$/.exec(n)?.[1] === level.toString())
+            .sort(([a], [b]) => (a < b) ? -1 : 1)
         const title = `**${level}000 Level Courses**`
         const existing = Array.from((await registration.messages.fetch()).values())
             .find(m => m.content.startsWith(title))
         let message = {
-            content: title
+            content: `${title}\r\n${levelClasses.map(([l, r]) => `${l}: ${r}`).join('\r\n')}`
         }
         if (levelClasses.length !== 0) {
-            message.components = levelClasses.reduce((res, c) => {
+            message.components = levelClasses.reduce((res, [c, _]) => {
                 if (res[res.length - 1].components.length === 5) {
                     res.push({
                         type: 1,
                         components: []
                     })
                 }
+                const count = rolesByName.get(c)?.members.size
                 res[res.length - 1].components.push({
                     type: 2,
-                    label: c.toUpperCase(),
-                    style: 1,
+                    label: `${count !== 0 ? `[ ${count} ] ` : ``}${c.toUpperCase()}`,
+                    style: 2,
                     custom_id: c
                 })
                 return res
@@ -471,8 +472,8 @@ async function runSyncServers (guild, log) {
                 type: 1,
                 components: [{
                     type: 2,
-                    label: 'Open Dialogue',
-                    style: 1,
+                    label: 'Select Classes to Remove',
+                    style: 2,
                     custom_id: 'class_removal'
                 }]
             }]
