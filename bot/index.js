@@ -272,6 +272,25 @@ async function getChannels (guild) {
     return Array.from((await guild.channels.fetch()).values())
 }
 
+function buildButtons (descriptions) {
+    return descriptions.reduce((res, desc) => {
+        if (res[res.length - 1].components.length === 5) {
+            res.push({
+                type: 1,
+                components: []
+            })
+        }
+        res[res.length - 1].components.push({
+            type: 2,
+            label: desc.label,
+            style: desc.style,
+            custom_id: desc.id,
+            disabled: desc.disabled
+        })
+        return res
+    }, [{ type: 1, components: [] }])
+}
+
 async function syncServers (guild, interaction = null) {
     let loglist = ''
     const log = string => {
@@ -439,22 +458,14 @@ async function runSyncServers (guild, log) {
             content: `${title}\r\n${levelClasses.map(([l, r]) => `${l}: ${r}`).join('\r\n')}`
         }
         if (levelClasses.length !== 0) {
-            message.components = levelClasses.reduce((res, [c, _]) => {
-                if (res[res.length - 1].components.length === 5) {
-                    res.push({
-                        type: 1,
-                        components: []
-                    })
-                }
+            message.components = buildButtons(levelClasses.map(([c, _]) => {
                 const count = rolesByName.get(c)?.members.size
-                res[res.length - 1].components.push({
-                    type: 2,
+                return {
                     label: `${count !== 0 ? `[ ${count} ] ` : ``}${c.toUpperCase()}`,
                     style: 2,
-                    custom_id: c
-                })
-                return res
-            }, [{ type: 1, components: [] }])
+                    id: c
+                }
+            }))
         }
         if (existing == null) {
             await registration.send(message)
@@ -519,15 +530,11 @@ async function handleButtonInteraction (interaction) {
             await interaction.reply({
                 content: 'Which classes would you like to hide?',
                 ephemeral: true,
-                components: [{
-                    type: 1,
-                    components: memberRolls.map(r => ({
-                        type: 2,
-                        label: r.name,
-                        style: 1,
-                        custom_id: `remove_class_${r.id}`
-                    }))
-                }]
+                components: buildButtons(memberRolls.map(r => ({
+                    label: r.name,
+                    style: 1,
+                    id: `remove_class_${r.id}`
+                })))
             })
         }
         return
@@ -540,16 +547,12 @@ async function handleButtonInteraction (interaction) {
             const savedReply = removalReplies.get(interaction.member.id)
             await interaction.update({
                 content: 'Which classes would you like to hide?',
-                components: [{
-                    type: 1,
-                    components: savedReply[0].map(r => ({
-                        type: 2,
-                        label: r.name,
-                        style: 1,
-                        custom_id: `remove_class_${r.id}`,
-                        disabled: !memberRolls.some(mr => mr.id === r.id) || target === r.id
-                    }))
-                }]
+                components: buildButtons(savedReply[0].map(r => ({
+                    label: r.name,
+                    style: 1,
+                    id: `remove_class_${r.id}`,
+                    disabled: !memberRolls.some(mr => mr.id === r.id) || target === r.id
+                })))
             })
         } else {
             await interaction.reply({
