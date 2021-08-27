@@ -607,11 +607,6 @@ client.on('interactionCreate', async interaction => {
     try {
         return await interactionHandler(interaction)
     } catch (e) {
-        if (interaction.replied) {
-            interaction.followUp('Something went wrong.')
-        } else {
-            interaction.reply('Something went wrong.')
-        }
         console.error(e)
     }
 })
