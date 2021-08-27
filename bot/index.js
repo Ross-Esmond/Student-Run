@@ -4,11 +4,14 @@ const { REST } = require('@discordjs/rest')
 const { Routes } = require('discord-api-types/v9')
 const { Client, Intents, MessageEmbed } = require('discord.js')
 const { Sequelize, Model, DataTypes } = require('sequelize')
-const client = new Client({ intents: [Intents.FLAGS.GUILDS] })
+const Fuse = require('fuse.js')
+const client = new Client({ intents: [Intents.FLAGS.GUILDS, Intents.FLAGS.GUILD_MESSAGES] })
 const sequelize = new Sequelize({
     dialect: "sqlite",
     storage: "./sq.db"
 })
+
+let classIndex = new Map()
 
 let commands = [
     {
@@ -36,7 +39,19 @@ let commands = [
                 type: 5
             }
         ]
-    }]
+    },
+    {
+        name: 'enroll',
+        description: 'searches for and enrolls you in class',
+        options: [
+            {
+                name: 'in',
+                description: 'the text to search for',
+                type: 3
+            }
+        ]
+    },
+]
 
 let commandHandlers = new Map()
 async function addState (name, attrs) {
@@ -263,6 +278,16 @@ async function syncServers (guild) {
         .filter(c => c.type === 'GUILD_CATEGORY')
         .map(c => c.name))
 
+    classIndex.set(
+        guild.id,
+        new Fuse(
+            classes.map(({ name, label }) => ({ name, label })),
+            {
+                keys: ['name', 'label'],
+                includeScore: true,
+                threshold: 0.5
+            }))
+
     const rolesByName = Array.from((await guild.roles.fetch()).values())
         .reduce((m, r) => { m.set(r.name, r); return m }, new Map())
     let classHeader = rolesByName.get('---------------Classes----------------')
@@ -473,8 +498,8 @@ async function handleButtonInteraction (interaction) {
         const memberRolls = interaction.member.roles.cache
             .filter(r => /^([a-z]){2,4}-\d{4}$/.test(r.name))
         const target = /^remove_class_(.+)$/.exec(interaction.customId)?.[1]
+        await interaction.member.roles.remove(target)
         if (removalReplies.has(interaction.member.id)) {
-            await interaction.member.roles.remove(target)
             const savedReply = removalReplies.get(interaction.member.id)
             await interaction.update({
                 content: 'Which classes would you like to hide?',
@@ -488,6 +513,11 @@ async function handleButtonInteraction (interaction) {
                         disabled: !memberRolls.some(mr => mr.id === r.id) || target === r.id
                     }))
                 }]
+            })
+        } else {
+            await interaction.reply({
+                content: `You have been removed from the class.`,
+                ephemeral: true
             })
         }
         return
@@ -540,6 +570,59 @@ client.on('interactionCreate', async interaction => {
 
     if (commandHandlers.has(interaction.commandName)) {
         await commandHandlers.get(interaction.commandName)(interaction)
+    }
+
+    if (interaction.commandName === 'enroll') {
+        if (classIndex.has(interaction.guildId)) {
+            const results = classIndex.get(interaction.guildId)
+                .search(interaction.options.getString('in'))
+            const firstScore = results[0].score
+            const qualityResults = results.filter(r => ((r.score/firstScore) < 1000))
+            const display = qualityResults.map(r => [r.item.name, r.item.label])
+            if (display.length === 0) {
+                interaction.reply({
+                    content: `Couldn't find a match.`,
+                    ephemeral: true
+                })
+            } else {
+                if (display.length === 1) {
+                    const role = (await realize(interaction.guild.roles)).find(r => r.name === display[0][0])
+                    await interaction.member.roles.add(role)
+                    interaction.reply({
+                        content: `You are now enrolled in **${display[0][0]}: ${display[0][1]}**`,
+                        ephemeral: true,
+                        components: [{
+                            type: 1,
+                            components: [{
+                                type: 2,
+                                label: 'undo',
+                                style: 1,
+                                custom_id: `remove_class_${role.id}`
+                            }]
+                        }]
+                    })
+                } else {
+                    interaction.reply({
+                        content: `I found ${display.length} results. ${display.length > 5 ? ' Showing top five.' : ''}`,
+                        ephemeral: true,
+                        components: display.slice(0, 5).map(([l, r]) => ({
+                            type: 1,
+                            components: [{
+                                type: 2,
+                                label: `${l}: ${r}`,
+                                style: 1,
+                                custom_id: l
+                            }]
+                        }))
+                    })
+                }
+            }
+        } else {
+            await interaction.reply({
+                content: 'Sorry, classes are not set up at the moment.',
+                ephemeral: true
+            })
+        }
     }
 
     if (interaction.commandName === 'setup-classes') {
