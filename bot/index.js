@@ -217,7 +217,7 @@ async function addState (name, attrs) {
 
     commandHandlers.set(`${name}-list`,
         async function (interaction) {
-            const all = await Class.findAll()
+            const all = await Class.findAll({ where: { guild: interaction.guild.id } })
             const tell = all.map(a => a.dataValues).map(d => `[${Object.keys(attrs).map(k => d[k]).join(',')}]`).join(', ')
             await interaction.reply(tell || "None found.")
         })
