@@ -482,6 +482,10 @@ async function runSyncServers (guild, log) {
                     {
                         id: manager,
                         allow: ['MANAGE_CHANNELS']
+                    },
+                    {
+                        id: manager,
+                        allow: ['VIEW_CHANNEL']
                     }
                 ]
             })
