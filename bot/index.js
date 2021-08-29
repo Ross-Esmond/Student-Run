@@ -494,27 +494,34 @@ async function runSyncServers (guild, log) {
     await log('creating class categories')
     for (let myClass of classes) {
         const allCap = myClass.name.toUpperCase()
+        let permissions = [
+            {
+                id: everyone,
+                deny: ['VIEW_CHANNEL']
+            },
+            {
+                id: postRolesByName.get(myClass.name),
+                allow: ['VIEW_CHANNEL']
+            },
+            {
+                id: manager,
+                allow: ['MANAGE_CHANNELS']
+            },
+            {
+                id: manager,
+                allow: ['VIEW_CHANNEL']
+            }
+        ]
+        if (postRolesByName.has('Omniscient')) {
+            permissions.push({
+                id: postRolesByName.get('Omniscient'),
+                allow: ['VIEW_CHANNEL']
+            })
+        }
         if (!categories.has(allCap)) {
             const cat = await guild.channels.create(allCap, {
                 type: 'GUILD_CATEGORY',
-                permissionOverwrites: [
-                    {
-                        id: everyone,
-                        deny: ['VIEW_CHANNEL']
-                    },
-                    {
-                        id: postRolesByName.get(myClass.name),
-                        allow: ['VIEW_CHANNEL']
-                    },
-                    {
-                        id: manager,
-                        allow: ['MANAGE_CHANNELS']
-                    },
-                    {
-                        id: manager,
-                        allow: ['VIEW_CHANNEL']
-                    }
-                ]
+                permissionOverwrites: permissions
             })
         }
     }
@@ -600,20 +607,25 @@ async function runSyncServers (guild, log) {
         }
     }
 
-    const removalBar = (await realize(registration.messages))
-        .find(m => m.content.startsWith('**Remove Classes**'))
-    if (removalBar == null) {
+    const otherTitle = '**Other Options**'
+    const otherBar = (await realize(registration.messages))
+        .find(m => m.content.startsWith(otherTitle))
+    if (otherBar == null) {
+        let buttons = [{
+            label: 'Select Classes to Remove',
+            style: 2,
+            id: 'class_removal'
+        }]
+        if (rolesByName.has('Omniscient')) {
+            buttons.push({
+                label: 'See/Hide all class channels.',
+                style: 2,
+                id: `toggle_${rolesByName.get('Omniscient').id}`
+            })
+        }
         await registration.send({
-            content: '**Remove Classes**\r\n',
-            components: [{
-                type: 1,
-                components: [{
-                    type: 2,
-                    label: 'Select Classes to Remove',
-                    style: 2,
-                    custom_id: 'class_removal'
-                }]
-            }]
+            content: `${otherTitle}\r\n`,
+            components: buildButtons(buttons)
         })
     }
 }
@@ -685,6 +697,24 @@ async function handleButtonInteraction (interaction) {
                 content: `You have been removed from the class.`,
                 ephemeral: true
             })
+        }
+        return
+    } else if (interaction.customId.startsWith('toggle_')) {
+        const target = /^toggle_(.+)$/.exec(interaction.customId)?.[1]
+        if (target != null) {
+            if (interaction.member.roles.cache.has(target)) {
+                await interaction.member.roles.remove(target)
+                await interaction.reply({
+                    content: 'Role removed.',
+                    ephemeral: true
+                })
+            } else {
+                await interaction.member.roles.add(target)
+                await interaction.reply({
+                    content: 'Role added.',
+                    ephemeral: true
+                })
+            }
         }
         return
     }
