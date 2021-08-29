@@ -19,6 +19,8 @@ const sequelize = new Sequelize({
     storage: "./sq.db"
 })
 
+const classRegex = /^[a-zA-Z]{2,4}-\d{4}(H|W|h|w)?$/
+
 let classIndex = new Map()
 
 let commands = [
@@ -59,6 +61,10 @@ let commands = [
             }
         ]
     },
+    {
+        name: 'invite',
+        description: 'creates a new invite'
+    }
 ]
 
 class Invite extends Model {}
@@ -302,7 +308,7 @@ client.on('guildMemberAdd', async member => {
         const channel = candidates[0].channel
         if (channel.parentId != null) {
             const category = member.guild.channels.cache.get(channel.parentId)
-            if (/^[A-Z]{2,4}-\d{4}$/.test(category.name)) {
+            if (classRegex.test(category.name)) {
                 const role = (await realize(member.guild.roles))
                     .find(r => r.name === category.name.toLowerCase())
                 member.roles.add(role)
@@ -548,7 +554,7 @@ async function runSyncServers (guild, log) {
     for (let level of [1, 2, 3, 4, 5, 8]) {
         const levelClasses = classes
             .map(c => [c.name, c.label])
-            .filter(([n, _]) => /^[a-z]{2,4}-(\d)\d{3}$/.exec(n)?.[1] === level.toString())
+            .filter(([n, _]) => /^[a-z]{2,4}-(\d)\d{3}(W|H|w|h)?$/.exec(n)?.[1] === level.toString())
             .sort(([a], [b]) => (a < b) ? -1 : 1)
         const title = `**${level}000 Level Courses**`
         const existing = Array.from((await registration.messages.fetch()).values())
@@ -594,8 +600,8 @@ async function runSyncServers (guild, log) {
 async function classCommand (command, interaction, handler) {
     if (interaction.commandName === command) {
         if (interaction.member.roles.cache.some(r => r.name === "Verified")) {
-            const name = interaction.options.getString('name')
-            if (/^([a-z]){2,4}-\d{4}$/.test(name)) {
+            const name = interaction.options.getString('name').toLowerCase()
+            if (classRegex.test(name)) {
                 const current = await Class.findAll({ where: { guild: interaction.guild.id, name } })
                 await handler(name, current)
                 try {
@@ -617,7 +623,7 @@ let removalReplies = new Map()
 async function handleButtonInteraction (interaction) {
     if (interaction.customId === 'class_removal') {
         const memberRolls = interaction.member.roles.cache
-            .filter(r => /^([a-z]){2,4}-\d{4}$/.test(r.name))
+            .filter(r => classRegex.test(r.name))
         if (Array.from(memberRolls).length === 0) {
             await interaction.reply({
                 content: 'You\'re not in any classes dingaling.',
@@ -639,7 +645,7 @@ async function handleButtonInteraction (interaction) {
         return
     } else if (interaction.customId.startsWith('remove_class_')) {
         const memberRolls = interaction.member.roles.cache
-            .filter(r => /^([a-z]){2,4}-\d{4}$/.test(r.name))
+            .filter(r => classRegex.test(r.name))
         const target = /^remove_class_(.+)$/.exec(interaction.customId)?.[1]
         await interaction.member.roles.remove(target)
         if (removalReplies.has(interaction.member.id)) {
@@ -824,6 +830,36 @@ async function interactionHandler (interaction) {
             } else {
                 await interaction.reply(`If run with commit:True, I would delete ${emptyRoles.map(r => r.name).join(', ')}.`)
             }
+        }
+    }
+
+    if (interaction.commandName === 'invite') {
+        const parentId = interaction.channel.parentId
+        let parent = null
+        if (parentId != null) {
+            parent = interaction.guild.channels.cache.get(parentId)
+        }
+        if (parent != null && classRegex.test(parent.name)) {
+            const invite = await interaction.guild.invites.create(
+                interaction.channel,
+                {
+                    maxAge: 0,
+                    unique: true
+                })
+            await interaction.reply(`
+                Here's your invite!\r\n> ${invite.url}\r\nUsers who join with this invite will automatically be able to see channels for ${parent.name}.`)
+        } else {
+            const invite = await interaction.guild.invites.create(
+                interaction.channel,
+                {
+                    maxAge: 0,
+                    unique: true
+                })
+            await interaction.reply({
+                content: `
+                    Here's your invite!\r\n> ${invite.url}\r\nIf this invite is intended to be shared with a class, you should consider running \`/invite\` from a class channel. That way the invite will automatically give users permission to see those channels.`,
+                ephemeral: true
+            })
         }
     }
 }
