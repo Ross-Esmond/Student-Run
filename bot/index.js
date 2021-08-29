@@ -356,6 +356,7 @@ async function checkInvites () {
     let invites = []
     for (let g of guilds) {
         const guild = await g.fetch()
+        logger.info(`Checking invites for ${guild.name}.`)
         let gi = await realize(guild.invites)
         invites = invites.concat(gi)
     }
