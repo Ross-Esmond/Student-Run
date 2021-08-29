@@ -35,6 +35,14 @@ const logger = createLogger({
 
 const classRegex = /^[a-zA-Z]{2,4}-\d{4}(H|W|h|w)?$/
 
+const interactionStore = new Map()
+const invitePattern = /\{invite\}/g
+const prepInviteContents = (content, name, url) => {
+    return content.replaceAll(/\{class\}/g, name)
+        .replaceAll(invitePattern, url)
+        .replaceAll(/\\r/g, '\r')
+}
+
 let classIndex = new Map()
 
 let commands = [
@@ -78,6 +86,24 @@ let commands = [
     {
         name: 'invite',
         description: 'creates a new invite'
+    },
+    {
+        name: 'invite-campaign',
+        description: 'will add an invite message to every class when run with `commit:True`',
+        options: [
+            {
+                name: 'content',
+                description: 'A template to use for the message contents. {class} and {invite} will be replaced.',
+                type: 3,
+                required: true
+            },
+            {
+                name: 'channel',
+                description: 'the class channel to use. `general` will target general-math-1001, general-math1-1002, etc',
+                type: 3,
+                required: true
+            }
+        ]
     }
 ]
 
@@ -721,6 +747,39 @@ async function handleButtonInteraction (interaction) {
             }
         }
         return
+    } else if (interaction.customId.startsWith('launch_campaign_')) {
+        await interaction.update({
+            components: buildButtons([{
+                label: 'Launch Campaign',
+                style: 4,
+                id: `launch_campain_disabled`,
+                disabled: true
+            }])
+        })
+        const id = /^launch_campaign_(.+)$/.exec(interaction.customId)?.[1]
+        if (id == null) throw new Error('launch campain id was null')
+        const [content, channel] = interactionStore.get(id)
+        interactionStore.delete(id)
+        const classes = await Class.findAll({ where: { guild: interaction.guild.id } })
+        const channels = new Map((await realize(interaction.guild.channels)).map(c => [c.name, c]))
+        const targets = classes.map(c => [channels.get(`${channel}-${c.name}`), c]).filter(([c, _]) => c != null)
+        for (let [channel, myClass] of targets) {
+            try {
+                const invite = await channel.createInvite({
+                    maxAge: 0,
+                    unique: true
+                })
+                const targetContent = prepInviteContents(content, `${myClass.name}: ${myClass.label}`, invite.url)
+                channel.send(targetContent)
+            } catch (e) {
+                logger.error(e)
+            }
+        }
+        await interaction.followUp({
+            content: 'Campain was successful.',
+            ephemeral: true
+        })
+        return
     }
 
     const role = (await realize(interaction.guild.roles))
@@ -927,6 +986,43 @@ async function interactionHandler (interaction) {
                     Here's your invite!\r\n> ${invite.url}\r\nIf this invite is intended to be shared with a class, you should consider running \`/invite\` from a class channel. That way the invite will automatically give users permission to see those channels.`,
                 ephemeral: true
             })
+        }
+    }
+
+    if (interaction.commandName === 'invite-campaign') {
+        if (interaction.member.permissions.any('ADMINISTRATOR')) {
+            const content = interaction.options.getString('content')
+            const channel = interaction.options.getString('channel')
+            const classes = await Class.findAll({ where: { guild: interaction.guild.id } })
+            const classChannels = await ClassChannel.findAll({ where: { guild: interaction.guild.id } })
+
+            if (!classChannels.some(c => c.name === channel)) {
+                await interaction.reply({
+                    content: `Could not find ${channel}.`,
+                    ephemeral: true
+                })
+            } else if (!invitePattern.test(content)) {
+                await interaction.reply({
+                    content: `Use {invite} to add the invite url to your message contents.`,
+                    ephemeral: true
+                })
+            } else {
+                interactionStore.set(interaction.id, [content, channel])
+
+                await interaction.reply({
+                    content: `If launched, users in the ${channel} channels will see the following:`,
+                    ephemeral: true
+                })
+                await interaction.followUp({
+                    content: prepInviteContents(content, 'FAKE-1234: Intro to Fauxology', 'https://discord.gg/abcd1234567'),
+                    ephemeral: true,
+                    components: buildButtons([{
+                        label: 'Launch Campaign',
+                        style: 4,
+                        id: `launch_campaign_${interaction.id}`
+                    }])
+                })
+            }
         }
     }
 }
