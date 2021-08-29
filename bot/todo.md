@@ -1,2 +1,6 @@
 - [ ] Add verification for state entries: MATH-1234 vs NoPe=12b4
 - [ ] Add configuration for permissions on state entries: Admin vs Verified
+- [ ] Don't create class channels until a student joins for them.
+- [ ] Allow for classes to be a subserver.
+- [ ] Allow for the upload of a text file for classes.
+- [ ] Make Class-Registration private initially.
