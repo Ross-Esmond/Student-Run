@@ -752,12 +752,12 @@ async function handleButtonInteraction (interaction) {
             components: buildButtons([{
                 label: 'Launch Campaign',
                 style: 4,
-                id: `launch_campain_disabled`,
+                id: `launch_campaign_disabled`,
                 disabled: true
             }])
         })
         const id = /^launch_campaign_(.+)$/.exec(interaction.customId)?.[1]
-        if (id == null) throw new Error('launch campain id was null')
+        if (id == null) throw new Error('launch campaign id was null')
         const [content, channel] = interactionStore.get(id)
         interactionStore.delete(id)
         const classes = await Class.findAll({ where: { guild: interaction.guild.id } })
