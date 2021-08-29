@@ -102,12 +102,25 @@ func ServeGuilds(res http.ResponseWriter, req *http.Request) {
 	}
 }
 
+func RedirectHandler(w http.ResponseWriter, req *http.Request) {
+    target := "https://" + req.Host + req.URL.Path
+    if len(req.URL.RawQuery) > 0 {
+        target += "?" + req.URL.RawQuery
+    }
+    http.Redirect(w, req, target, http.StatusPermanentRedirect)
+}
+
 func main() {
 	http.Handle("/", http.FileServer(http.Dir("static/")))
 	port := os.Getenv("PORT")
 
+	redirect := "http://localhost:"+port+"/api/callback/google"
+	if os.Getenv("BUILD") == "PROD" {
+		redirect = "https://studentrun.chat/api/callback/google"
+	}
+
 	goth.UseProviders(
-		google.New(os.Getenv("GOOGLE_KEY"), os.Getenv("GOOGLE_SECRET"), "http://localhost:"+port+"/api/callback/google"),
+		google.New(os.Getenv("GOOGLE_KEY"), os.Getenv("GOOGLE_SECRET"), redirect),
 	)
 
 	r := mux.NewRouter()
@@ -119,5 +132,10 @@ func main() {
 	http.Handle("/api/", r)
 
 	fmt.Println("listening on localhost:" + port)
-	log.Fatal(http.ListenAndServe(":" + port, nil))
+	if os.Getenv("BUILD") == "PROD" {
+		go http.ListenAndServe(":80", http.HandlerFunc(RedirectHandler))
+		log.Fatal(http.ListenAndServeTLS(":" + port, "/etc/letsencrypt/live/studentrun.chat-0001/fullchain.pem", "/etc/letsencrypt/live/studentrun.chat-0001/privkey.pem", nil))
+	} else {
+                log.Fatal(http.ListenAndServe(":" + port, nil))
+	}
 }
