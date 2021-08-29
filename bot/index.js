@@ -294,6 +294,13 @@ client.on('inviteCreate', async invite => {
 })
 
 client.on('guildMemberAdd', async member => {
+    try {
+        await handleNewMember(member)
+    } catch (e) {
+        console.error(e)
+    }
+})
+async function handleNewMember (member) {
     const next = await realize(member.guild.invites)
     const prior = await Invite.findAll({ where: { guild: member.guild.id } })
 
@@ -308,7 +315,7 @@ client.on('guildMemberAdd', async member => {
         const channel = candidates[0].channel
         if (channel.parentId != null) {
             const category = member.guild.channels.cache.get(channel.parentId)
-            if (classRegex.test(category.name)) {
+            if (category != null && classRegex.test(category.name)) {
                 const role = (await realize(member.guild.roles))
                     .find(r => r.name === category.name.toLowerCase())
                 member.roles.add(role)
@@ -317,7 +324,7 @@ client.on('guildMemberAdd', async member => {
     }
 
     checkInvitesLoop()
-})
+}
 
 let nextInviteCheck = null
 async function checkInvitesLoop () {
