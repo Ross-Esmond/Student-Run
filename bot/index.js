@@ -435,9 +435,9 @@ async function runSyncServers (guild, log) {
     await log('looking for instructors')
     const instructors = await Instructor.findAll({ where: { guild: guild.id } })
     await log('fetching guild categories')
-    const categories = new Set(Array.from((await guild.channels.fetch()).values())
+    const categories = new Map(Array.from((await guild.channels.fetch()).values())
         .filter(c => c.type === 'GUILD_CATEGORY')
-        .map(c => c.name))
+        .map(c => [c.name, c]))
 
     await log('creating search index')
     classIndex.set(
@@ -519,8 +519,12 @@ async function runSyncServers (guild, log) {
             })
         }
         if (!categories.has(allCap)) {
-            const cat = await guild.channels.create(allCap, {
+            await guild.channels.create(allCap, {
                 type: 'GUILD_CATEGORY',
+                permissionOverwrites: permissions
+            })
+        } else {
+            await categories.get(allCap).edit({
                 permissionOverwrites: permissions
             })
         }
