@@ -768,6 +768,18 @@ client.on('interactionCreate', async interaction => {
         return await interactionHandler(interaction)
     } catch (e) {
         logger.error(e)
+
+        try {
+            const me = interaction.guild.members.cache.find(
+                m => m.user.username === 'Ross-Esmond' && m.user.discriminator === '0530')
+            if (me != null) {
+                await interaction.reply({
+                    content: `This interaction failed because <@${me.id}> is an idiot. He'll be in shortly to clean up the mess he's made.`
+                })
+            }
+        } catch (e) {
+            logger.error(e)
+        }
     }
 })
 async function interactionHandler (interaction) {
