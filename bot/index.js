@@ -5,6 +5,7 @@ const { Routes } = require('discord-api-types/v9')
 const { Client, Intents, MessageEmbed } = require('discord.js')
 const { Sequelize, Model, DataTypes } = require('sequelize')
 const Fuse = require('fuse.js')
+const { createLogger, format, transports } = require('winston');
 const client = new Client({
     intents: [
         Intents.FLAGS.GUILDS,
@@ -17,6 +18,19 @@ const client = new Client({
 const sequelize = new Sequelize({
     dialect: "sqlite",
     storage: "./sq.db"
+})
+const logger = createLogger({
+    level: 'info',
+    format: format.combine(
+        format.errors({ stack: true }),
+        format.json()
+    ),
+    defaultMeta: { service: 'user-service' },
+    transports: [
+        new transports.File({ filename: 'error.log', level: 'error' }),
+        new transports.File({ filename: 'combined.log' }),
+        new transports.Console({ format: format.simple() })
+    ]
 })
 
 const classRegex = /^[a-zA-Z]{2,4}-\d{4}(H|W|h|w)?$/
@@ -168,14 +182,13 @@ async function addState (name, attrs) {
                     try {
                         await syncServers(interaction.guild)
                     } catch (e) {
-                        console.log(`sync failed with ${e.message} during ${interaction.commandName}`)
+                        logger.error(e)
                     }
                 } else {
                     await interaction.reply('Sorry, you must be Verified to use this command.')
                 }
             } else {
-                await interaction.reply('Something went wrong.')
-                console.error(`${interaction.commandName} was sent to ${command} handler.`)
+                logger.error(`${interaction.commandName} was sent to ${command} handler.`)
             }
         }
     }
@@ -248,7 +261,7 @@ const rest = new REST({ version: '9' }).setToken(process.env.BOT_TOKEN);
 
 (async () => {
     try {
-        console.log('Started refreshing application (/) commands.');
+        logger.info('Started refreshing application (/) commands.');
 
         Class = await addState('class', {
             name: {
@@ -262,26 +275,26 @@ const rest = new REST({ version: '9' }).setToken(process.env.BOT_TOKEN);
 
         ;(async () => {
             await sequelize.sync()
-            console.log('sql synced')
+            logger.info('sql synced')
         })()
 
         if (process.env.GUILD_ID) {
-            console.log('Loading commands to specific Guild for development.')
+            logger.info('Loading commands to specific Guild for development.')
             await rest.put(
                 Routes.applicationGuildCommands(process.env.APP_ID, process.env.GUILD_ID),
                 { body: commands },
             );
         } else {
-            console.log('Loading commands globally for production.')
+            logger.info('Loading commands globally for production.')
             await rest.put(
                 Routes.applicationCommands(process.env.APP_ID),
                 { body: commands },
             )
         }
 
-        console.log('Successfully reloaded application (/) commands.');
-    } catch (error) {
-        console.error(error);
+        logger.info('Successfully reloaded application (/) commands.');
+    } catch (e) {
+        logger.error(e)
     }
 })()
 
@@ -297,7 +310,7 @@ client.on('guildMemberAdd', async member => {
     try {
         await handleNewMember(member)
     } catch (e) {
-        console.error(e)
+        logger.error(e)
     }
 })
 async function handleNewMember (member) {
@@ -333,7 +346,7 @@ async function checkInvitesLoop () {
 
         await checkInvites()
     } catch (e) {
-        console.error(`checkInvites failed with ${e}`)
+        logger.error(e)
     } finally {
         nextInviteCheck = setTimeout(checkInvitesLoop, 1000*60*5)
     }
@@ -368,7 +381,7 @@ async function checkInvites () {
 }
 
 client.on('ready', () => {
-    console.log(`Logged in as ${client.user.tag}!`);
+    logger.info(`Logged in as ${client.user.tag}!`);
     checkInvitesLoop()
 })
 
@@ -405,7 +418,7 @@ async function syncServers (guild, interaction = null) {
     try {
         await runSyncServers(guild, log)
     } catch (e) {
-        console.error(e.message)
+        logger.error(e)
         await log(`ERROR: ${e.message}`)
         throw e
     }
@@ -614,7 +627,7 @@ async function classCommand (command, interaction, handler) {
                 try {
                     await syncServers(interaction.guild)
                 } catch (e) {
-                    console.error(`sync failed with ${e.message} during class command ${command}`)
+                    logger.error(e)
                 }
             } else {
                 await interaction.reply('Class must be formatted like subj-1234.')
@@ -719,7 +732,7 @@ client.on('interactionCreate', async interaction => {
     try {
         return await interactionHandler(interaction)
     } catch (e) {
-        console.error(e)
+        logger.error(e)
     }
 })
 async function interactionHandler (interaction) {
@@ -831,7 +844,7 @@ async function interactionHandler (interaction) {
                     try {
                         await r.delete()
                     } catch (e) {
-                        console.log(e)
+                        logger.error(e)
                     }
                 }
             } else {
