@@ -289,7 +289,8 @@ const rest = new REST({ version: '9' }).setToken(process.env.BOT_TOKEN);
                 type: DataTypes.STRING,
                 primaryKey: true
             },
-            label: DataTypes.STRING
+            label: DataTypes.STRING,
+            emoji: DataTypes.STRING
         })
         ClassChannel = await addState('class-channel', { name: DataTypes.STRING })
         Instructor = await addState('instructor', { 'class-name': DataTypes.STRING, 'instructor': DataTypes.STRING })
@@ -606,20 +607,20 @@ async function runSyncServers (guild, log) {
 
     for (let level of [1, 2, 3, 4, 5, 8]) {
         const levelClasses = classes
-            .map(c => [c.name, c.label])
-            .filter(([n, _]) => /^[a-z]{2,4}-(\d)\d{3}(W|H|w|h)?$/.exec(n)?.[1] === level.toString())
-            .sort(([a], [b]) => (a < b) ? -1 : 1)
+            .map(c => [c.emoji, c.name, c.label])
+            .filter(([, n,]) => /^[a-z]{2,4}-(\d)\d{3}(W|H|w|h)?$/.exec(n)?.[1] === level.toString())
+            .sort(([, a,], [, b,]) => (a < b) ? -1 : 1)
         const title = `**${level}000 Level Courses**`
         const existing = Array.from((await registration.messages.fetch()).values())
             .find(m => m.content.startsWith(title))
         let message = {
-            content: `${title}\r\n${levelClasses.map(([l, r]) => `${l}: ${r}`).join('\r\n')}`
+            content: `${title}\r\n${levelClasses.map(([e, l, r]) => `${e} ${l}: ${r}`).join('\r\n')}`
         }
         if (levelClasses.length !== 0) {
-            message.components = buildButtons(levelClasses.map(([c, _]) => {
+            message.components = buildButtons(levelClasses.map(([e, c, _]) => {
                 const count = rolesByName.get(c)?.members.size
                 return {
-                    label: `${count !== 0 ? `[ ${count} ] ` : ``}${c.toUpperCase()}`,
+                    label: `${e} ${count !== 0 ? `[ ${count} ] ` : ``}${c.toUpperCase()}`,
                     style: 2,
                     id: c
                 }
