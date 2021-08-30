@@ -79,7 +79,8 @@ let commands = [
             {
                 name: 'in',
                 description: 'the text to search for',
-                type: 3
+                type: 3,
+                required: true
             }
         ]
     },
