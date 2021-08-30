@@ -205,11 +205,6 @@ async function addState (name, attrs) {
                         }})
                     }
                     await handler(values, current, interaction)
-                    try {
-                        await syncServers(interaction.guild)
-                    } catch (e) {
-                        logger.error(e)
-                    }
                 } else {
                     await interaction.reply('Sorry, you must be Verified to use this command.')
                 }
@@ -667,11 +662,6 @@ async function classCommand (command, interaction, handler) {
             if (classRegex.test(name)) {
                 const current = await Class.findAll({ where: { guild: interaction.guild.id, name } })
                 await handler(name, current)
-                try {
-                    await syncServers(interaction.guild)
-                } catch (e) {
-                    logger.error(e)
-                }
             } else {
                 await interaction.reply('Class must be formatted like subj-1234.')
             }
