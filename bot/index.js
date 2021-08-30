@@ -578,6 +578,19 @@ async function runSyncServers (guild, log) {
         }
     }
 
+    await syncRegistrationPage(guild, log)
+}
+
+async function syncRegistrationPage (guild, log = null) {
+    if (log == null) log = () => Promise.resolve()
+
+    const everyone = guild.roles.cache.find(r => r.name === '@everyone')
+    const manager = guild.roles.cache.find(r => r.name.startsWith('Student-Run Bot'))
+    await log('looking for classes')
+    const classes = await Class.findAll({ where: { guild: guild.id } })
+    const rolesByName = Array.from((await guild.roles.fetch()).values())
+        .reduce((m, r) => { m.set(r.name, r); return m }, new Map())
+
     await log('fetching class-registration channel')
     let registration = (await getChannels(guild)).find(c => c.name === 'class-registration')
     if (registration == null) {
@@ -740,6 +753,7 @@ async function handleButtonInteraction (interaction) {
                 ephemeral: true
             })
         }
+        scheduleRegSync(interaction.guild)
         return
     } else if (interaction.customId.startsWith('toggle_')) {
         const target = /^toggle_(.+)$/.exec(interaction.customId)?.[1]
@@ -758,6 +772,7 @@ async function handleButtonInteraction (interaction) {
                 })
             }
         }
+        scheduleRegSync(interaction.guild)
         return
     } else if (interaction.customId.startsWith('launch_campaign_')) {
         await interaction.update({
@@ -831,6 +846,21 @@ async function handleButtonInteraction (interaction) {
             content: `There was no ${role.name}. How weird...`,
             ephemeral: true
         })
+    }
+    scheduleRegSync(interaction.guild)
+}
+
+let regSyncCancels = new Map()
+function scheduleRegSync (guild) {
+    try {
+        if (regSyncCancels.has(guild.id)) {
+            clearTimeout(regSyncCancels.get(guild.id))
+        }
+        regSyncCancels.set(guild.id,
+            setTimeout(() => syncRegistrationPage(guild).catch(e => logger.error(e)), 1000*30)
+        )
+    } catch (e) {
+        logger.error(e)
     }
 }
 
