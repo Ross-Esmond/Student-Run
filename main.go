@@ -14,9 +14,13 @@ import (
     "github.com/markbates/goth"
     "github.com/markbates/goth/gothic"
     "github.com/markbates/goth/providers/google"
+
+    "gorm.io/gorm"
+    "gorm.io/driver/sqlite"
 )
 
 var store = sessions.NewCookieStore([]byte(os.Getenv("SESSION_SECRET")))
+var db, err = gorm.Open(sqlite.Open("bot/sq.db"), &gorm.Config{})
 
 func CallbackHandler(res http.ResponseWriter, req *http.Request) {
     user, err := gothic.CompleteUserAuth(res, req)
@@ -76,27 +80,8 @@ func ServeGuilds(res http.ResponseWriter, req *http.Request) {
             return
         }
 
-        guilds := []Guild{
-            {"https://discord.gg/***REMOVED***",
-            "UMN Mathematics",
-            "801115391836946473",
-            "08b8598c33d03d8f9a86a481e1bf9fdb",
-            "All MATH and STAT Classes"},
-            {"https://discord.gg/***REMOVED***",
-            "UMN CSCI",
-            "689902170014875677",
-            "39436bc294d0772c347f16d2167e38e2",
-            "All CSCI Classes"},
-            {"https://discord.gg/***REMOVED***",
-            "UMN Physics",
-            "752993940571160768",
-            "bb4a15e7d8bf84a03124ae946a8cccb2",
-            "All PHYS Classes"},
-            {"https://discord.gg/***REMOVED***",
-            "UMN Art Peeps",
-            "802222628952997909",
-            "4f6d56f37e97b541134f2dfe98ddfad2",
-            "All ARTS Classes"}}
+        var guilds []Guild
+        db.Find(&guilds)
         res.Header().Set("Content-Type", "application/json")
         json.NewEncoder(res).Encode(guilds)
     }
@@ -111,6 +96,8 @@ func RedirectHandler(w http.ResponseWriter, req *http.Request) {
 }
 
 func main() {
+    db.AutoMigrate(&Guild{})
+
     http.Handle("/", http.FileServer(http.Dir("static/")))
     port := os.Getenv("PORT")
 
