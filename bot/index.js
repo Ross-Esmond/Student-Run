@@ -596,12 +596,25 @@ async function runSyncServers (guild, log) {
         })
     }
 
+    const colorGen = (function* () {
+        while (true) {
+            yield '#6A0606'
+            yield '#E6B60A'
+        }
+    })()
+
     await log('posting class-registration comments')
     const header = Array.from((await registration.messages.fetch()).values())
-        .find(m => m.content.startsWith('**Class Channel Access**'))
+        .find(m => m.embeds[0]?.title?.startsWith('**Class Channel Access**') ?? false)
     if (header == null) {
         await registration.send({
-            content: '**Class Channel Access**\r\nThe following buttons **toggle** access to a class.'
+            embeds: [
+                new MessageEmbed()
+                    .setColor(colorGen.next().value)
+                    .setTitle('**Class Channel Access**')
+                    .setDescription(`The following buttons **toggle** access to a class.\
+                        You may also use \`/enroll in:search term\` to enroll in classes.`)
+            ]
         })
     }
 
@@ -612,9 +625,13 @@ async function runSyncServers (guild, log) {
             .sort(([, a,], [, b,]) => (a < b) ? -1 : 1)
         const title = `**${level}000 Level Courses**`
         const existing = Array.from((await registration.messages.fetch()).values())
-            .find(m => m.content.startsWith(title))
+            .find(m => m.embeds[0]?.title?.startsWith(title) ?? false)
+        const embed = new MessageEmbed()
+            .setColor(colorGen.next().value)
+            .setTitle(title)
+            .setDescription(levelClasses.map(([e, l, r]) => `${e} ${l.toUpperCase()}: ${r}`).join('\r\n'))
         let message = {
-            content: `${title}\r\n${levelClasses.map(([e, l, r]) => `${e} ${l}: ${r}`).join('\r\n')}`
+            embeds: [embed]
         }
         if (levelClasses.length !== 0) {
             message.components = buildButtons(levelClasses.map(([e, c, _]) => {
@@ -635,7 +652,7 @@ async function runSyncServers (guild, log) {
 
     const otherTitle = '**Other Options**'
     const otherBar = (await realize(registration.messages))
-        .find(m => m.content.startsWith(otherTitle))
+        .find(m => m.embeds[0]?.title?.startsWith(otherTitle) ?? false)
     if (otherBar == null) {
         let buttons = [{
             label: 'Select Classes to Remove',
@@ -650,7 +667,11 @@ async function runSyncServers (guild, log) {
             })
         }
         await registration.send({
-            content: `${otherTitle}\r\n`,
+            embeds: [
+                new MessageEmbed()
+                    .setColor(colorGen.next().value)
+                    .setTitle(otherTitle)
+            ],
             components: buildButtons(buttons)
         })
     }
