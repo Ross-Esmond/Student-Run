@@ -3,4 +3,4 @@
 - [ ] Don't create class channels until a student joins for them.
 - [ ] Allow for classes to be a subserver.
 - [ ] Allow for the upload of a text file for classes.
-- [ ] Make Class-Registration private initially.
+- [x] Make Class-Registration private initially.

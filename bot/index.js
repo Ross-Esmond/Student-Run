@@ -580,12 +580,12 @@ async function runSyncServers (guild, log) {
     await log('fetching class-registration channel')
     let registration = (await getChannels(guild)).find(c => c.name === 'class-registration')
     if (registration == null) {
-        await log('creating class-registration channel')
+        await log('creating private class-registration channel')
         registration = await guild.channels.create('class-registration', {
             permissionOverwrites: [
                 {
                     id: everyone.id,
-                    deny: ['SEND_MESSAGES']
+                    deny: ['SEND_MESSAGES', 'VIEW_CHANNEL']
                 },
                 {
                     id: manager.id,
@@ -898,7 +898,7 @@ async function interactionHandler (interaction) {
             await interaction.deferReply()
             try {
                 await syncServers(interaction.guild, interaction)
-                await interaction.editReply('Classes are ready.')
+                await interaction.editReply(`Classes are ready. Don't forget to make class-registration public.`)
             } catch (e) {
                 await interaction.followUp('Class setup failed.')
             }
