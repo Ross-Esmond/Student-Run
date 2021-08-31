@@ -426,7 +426,8 @@ function buildButtons (descriptions) {
             label: desc.label,
             style: desc.style,
             custom_id: desc.id,
-            disabled: desc.disabled
+            disabled: desc.disabled,
+            emoji: desc.emoji
         })
         return res
     }, [{ type: 1, components: [] }])
@@ -651,9 +652,10 @@ async function syncRegistrationPage (guild, log = null) {
             message.components = buildButtons(levelClasses.map(([e, c, _]) => {
                 const count = rolesByName.get(c)?.members.size
                 return {
-                    label: `${e} ${count !== 0 ? `[ ${count} ] ` : ``}${c.toUpperCase()}`,
+                    label: `${count !== 0 ? `[ ${count} ] ` : ``}${c.toUpperCase()}`,
                     style: 2,
-                    id: c
+                    id: c,
+                    emoji: e
                 }
             }))
         }
