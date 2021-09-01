@@ -52,7 +52,7 @@ func ProfileHandler(res http.ResponseWriter, req *http.Request) {
     if email == nil {
         res.Write([]byte("false"))
     } else {
-        match, _ := regexp.MatchString("umn\\.edu$", email.(string))
+        match, _ := regexp.MatchString("@umn\\.edu$", email.(string))
         if match {
             res.Write([]byte("true"))
         } else {
