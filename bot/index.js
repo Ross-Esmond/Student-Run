@@ -105,8 +105,24 @@ let commands = [
                 required: true
             }
         ]
+    },
+    {
+        name: 'set-class-visibility',
+        description: 'will toggle the visibility of classes for users without the class role',
+        options: [{
+            name: 'show-classes',
+            description: 'TRUE to show classes to everyone, regardless of role',
+            type: 5,
+            required: true
+        }]
     }
 ]
+
+class ClassVisibility extends Model {}
+ClassVisibility.init({
+    guild: DataTypes.STRING,
+    visible: DataTypes.BOOLEAN
+}, { sequelize, modelName: 'class-visibility' })
 
 class Invite extends Model {}
 Invite.init({
@@ -515,13 +531,17 @@ async function runSyncServers (guild, log) {
         }
     }
 
+    const [visibility,] = await ClassVisibility.findOrCreate({
+        where: { guild: guild.id },
+        defaults: { visible: false }
+    })
     await log('creating class categories')
     for (let myClass of classes) {
         const allCap = myClass.name.toUpperCase()
         let permissions = [
             {
                 id: everyone,
-                deny: ['VIEW_CHANNEL']
+                deny: visibility.visible ? [] : ['VIEW_CHANNEL']
             },
             {
                 id: postRolesByName.get(myClass.name),
@@ -554,7 +574,7 @@ async function runSyncServers (guild, log) {
         }
     }
 
-    const existing = new Set((await getChannels(guild)).map(c => c.name))
+    const existing = new Map((await getChannels(guild)).map(c => [c.name, c]))
     const nextCategories = Array.from((await guild.channels.fetch()).values())
         .reduce((map, obj) => map.set(obj.name, obj), new Map())
 
@@ -562,11 +582,14 @@ async function runSyncServers (guild, log) {
     for (let myClass of classes) {
         for (let channel of channels) {
             const channelName = `${channel.name}-${myClass.name}`
+            let ch
             if (!existing.has(channelName)) {
-                const ch = await guild.channels.create(channelName, {
-                    parent: nextCategories.get(myClass.name.toUpperCase())
-                })
+                existing.set(channelName,
+                    await guild.channels.create(channelName, {
+                        parent: nextCategories.get(myClass.name.toUpperCase())
+                    }))
             }
+            await existing.get(channelName).lockPermissions()
         }
     }
 
@@ -574,10 +597,12 @@ async function runSyncServers (guild, log) {
     for (let insr of instructors) {
         const channelName = `${insr.instructor}-${insr['class-name']}`
         if (!existing.has(channelName)) {
-            await guild.channels.create(channelName, {
-                parent: nextCategories.get(insr['class-name'].toUpperCase())
-            })
+            existing.set(channelName,
+                await guild.channels.create(channelName, {
+                    parent: nextCategories.get(insr['class-name'].toUpperCase())
+                }))
         }
+        await existing.get(channelName).lockPermissions()
     }
 
     await syncRegistrationPage(guild, log)
@@ -1068,6 +1093,24 @@ async function interactionHandler (interaction) {
                     }])
                 })
             }
+        }
+    }
+
+    if (interaction.commandName === 'set-class-visibility') {
+        if (interaction.member.permissions.any('ADMINISTRATOR')) {
+            const visible = interaction.options.getBoolean('show-classes')
+            const [setting,] = await ClassVisibility.findOrCreate({ where: { guild: interaction.guild.id } })
+            setting.visible = visible
+            await setting.save()
+            await interaction.reply({
+                content: `Visibility of classes set to ${visible}.`,
+                ephemeral: true
+            })
+        } else {
+            await interaction.reply({
+                content: `I'm afraid I can't do that, ${interaction?.member?.displayName ?? 'Dave'}.`,
+                ephemeral: true
+            })
         }
     }
 }
