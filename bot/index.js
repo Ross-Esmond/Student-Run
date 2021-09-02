@@ -49,6 +49,13 @@ let commands = [
     {
         name: 'setup-classes',
         description: 'Sets up class channels.',
+        options: [
+            {
+                name: 'full',
+                description: 'Also sorts the class roles. WARNING: Slow.',
+                type: 5
+            }
+        ]
     },
     {
         name: 'clean',
@@ -457,7 +464,8 @@ async function syncServers (guild, interaction = null) {
     }
 
     try {
-        await runSyncServers(guild, log)
+        const full = interaction?.options?.getBoolean('full') ?? false
+        await runSyncServers(guild, log, full)
     } catch (e) {
         logger.error(e)
         await log(`ERROR: ${e.message}`)
@@ -465,7 +473,7 @@ async function syncServers (guild, interaction = null) {
     }
 }
 
-async function runSyncServers (guild, log) {
+async function runSyncServers (guild, log, full) {
     const everyone = guild.roles.cache.find(r => r.name === '@everyone')
     const manager = guild.roles.cache.find(r => r.name.startsWith('Student-Run Bot'))
     await log('looking for classes')
@@ -522,12 +530,14 @@ async function runSyncServers (guild, log) {
             new Map())
     const sortedClasses = classes.map(c => c.name).sort().reverse()
     let pos = classHeader.position
-    await log('sorting class roles')
-    for (let className of sortedClasses) {
-        try {
-            await postRolesByName.get(className).setPosition(pos - 1)
-        } catch (e) {
-            // wrong roll position
+    if (full) {
+        await log('sorting class roles')
+        for (let className of sortedClasses) {
+            try {
+                await postRolesByName.get(className).setPosition(pos - 1)
+            } catch (e) {
+                // wrong roll position
+            }
         }
     }
 
