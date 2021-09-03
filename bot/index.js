@@ -181,6 +181,24 @@ let commands = [
                 required: true
             }
         ]
+    },
+    {
+        name: 'edit',
+        description: 'edits a message in the current channel using a file',
+        options: [
+            {
+                name: 'file-name',
+                description: 'the absorbed file to use',
+                type: 3,
+                required: true
+            },
+            {
+                name: 'message',
+                description: 'the id of the message',
+                type: 3,
+                required: true
+            }
+        ]
     }
 ]
 
@@ -989,6 +1007,51 @@ client.on('interactionCreate', async interaction => {
         }
     }
 })
+
+async function buildPost (interaction) {
+    const roles = new Map((await realize(interaction.guild.roles))
+        .map(r => [r.name, r]))
+    const channels = new Map((await realize(interaction.guild.channels))
+        .map(c => [c.name, c]))
+
+    const file = await File.findOne({
+        where: {
+            guild: interaction.guild.id,
+            name: interaction.options.getString('file-name')
+        }
+    })
+    const content = file.content
+    const colorGen = colorGenerator()
+    const embeds = content.split(/(?:\r\n|\r|\n){2}---(?:\r\n|\r|\n){2}/)
+        .map(c => {
+            const titleRegex = /^# (.+)(\r\n|\r|\n)*/
+            let embed = new MessageEmbed()
+                .setColor(colorGen.next().value)
+            if (titleRegex.test(c)) {
+                embed = embed.setTitle(c.match(titleRegex)[1])
+            }
+            const tagRegex = /{(@|#)([^}]+)}/g
+            const desc = c.replace(titleRegex, '')
+                .replaceAll(
+                    tagRegex,
+                    s => {
+                        const [, w, t] = tagRegex.exec(s)
+                        tagRegex.lastIndex = 0
+                        if (w === '@') {
+                            return `<@&${roles.get(t)?.id ?? 'not found'}>`
+                        } else if (w === '#') {
+                            return `<#${channels.get(t)?.id ?? 'not found'}>`
+                        }
+                    })
+            embed = embed
+                .setDescription(desc)
+            return embed
+        })
+    return {
+        embeds: embeds
+    }
+}
+
 async function interactionHandler (interaction) {
     if (interaction.isButton()) return await handleButtonInteraction(interaction)
 
@@ -1266,53 +1329,37 @@ async function interactionHandler (interaction) {
 
     if (interaction.commandName === 'post') {
         if (interaction.member.permissions.any('ADMINISTRATOR')) {
-            const roles = new Map((await realize(interaction.guild.roles))
-                .map(r => [r.name, r]))
-            const channels = new Map((await realize(interaction.guild.channels))
-                .map(c => [c.name, c]))
-
-            const file = await File.findOne({
-                where: {
-                    guild: interaction.guild.id,
-                    name: interaction.options.getString('file-name')
-                }
-            })
-            const content = file.content
-            const colorGen = colorGenerator()
-            const embeds = content.split(/(?:\r\n|\r|\n){2}---(?:\r\n|\r|\n){2}/)
-                .map(c => {
-                    const titleRegex = /^# (.+)(\r\n|\r|\n)*/
-                    let embed = new MessageEmbed()
-                        .setColor(colorGen.next().value)
-                    if (titleRegex.test(c)) {
-                        embed = embed.setTitle(c.match(titleRegex)[1])
-                    }
-                    const tagRegex = /{(@|#)([^}]+)}/g
-                    const desc = c.replace(titleRegex, '')
-                        .replaceAll(
-                            tagRegex,
-                            s => {
-                                const [, w, t] = tagRegex.exec(s)
-                                tagRegex.lastIndex = 0
-                                if (w === '@') {
-                                    return `<@&${roles.get(t)?.id ?? 'not found'}>`
-                                } else if (w === '#') {
-                                    return `<#${channels.get(t)?.id ?? 'not found'}>`
-                                }
-                            })
-                    embed = embed
-                        .setDescription(desc)
-                    return embed
-                })
-
-            await interaction.channel.send({
-                embeds: embeds
-            })
+            await interaction.channel.send(await buildPost(interaction))
 
             await interaction.reply({
                 content: 'done',
                 ephemeral: true
             })
+        } else {
+            await interaction.reply({
+                content: `I'm afraid I can't do that, ${interaction?.member?.displayName ?? 'Dave'}.`,
+                ephemeral: true
+            })
+        }
+    }
+
+    if (interaction.commandName === 'edit') {
+        if (interaction.member.permissions.any('ADMINISTRATOR')) {
+            const id = interaction.options.getString('message')
+            const message = (await realize(interaction.channel.messages)).find(m => m.id === id)
+            if (message == null) {
+                await interaction.reply({
+                    content: 'Message not found.',
+                    ephemeral: true
+                })
+            } else {
+                await message.edit(await buildPost(interaction))
+
+                await interaction.reply({
+                    content: 'done',
+                    ephemeral: true
+                })
+            }
         } else {
             await interaction.reply({
                 content: `I'm afraid I can't do that, ${interaction?.member?.displayName ?? 'Dave'}.`,
