@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 
+const got = require('got')
 const { REST } = require('@discordjs/rest')
 const { Routes } = require('discord-api-types/v9')
-const { Client, Intents, MessageEmbed } = require('discord.js')
+const { Client, Intents, MessageEmbed, MessageAttachment } = require('discord.js')
 const { Sequelize, Model, DataTypes } = require('sequelize')
 const Fuse = require('fuse.js')
 const { createLogger, format, transports } = require('winston');
@@ -122,6 +123,64 @@ let commands = [
             type: 5,
             required: true
         }]
+    },
+    {
+        name: 'absorb-file',
+        description: 'adds a file message to the database for later use',
+        options: [
+            {
+                name: 'name',
+                description: 'a name with which to identify this entry',
+                type: 3,
+                required: true
+            },
+            {
+                name: 'message',
+                description: 'the message id of the message with the attached file to add',
+                type: 3,
+                required: true
+            }
+        ]
+    },
+    {
+        name: 'file-list',
+        description: 'lists all absorbed files'
+    },
+    {
+        name: 'get-file',
+        description: 'returns a file from the database',
+        options: [
+            {
+                name: 'file-name',
+                description: 'the name of the file',
+                type: 3,
+                required: true
+            }
+        ]
+    },
+    {
+        name: 'delete-file',
+        description: 'deletes a file',
+        options: [
+            {
+                name: 'file-name',
+                description: 'the name of the file',
+                type: 3,
+                required: true
+            }
+        ]
+    },
+    {
+        name: 'post',
+        description: 'posts a message using a file',
+        options: [
+            {
+                name: 'file-name',
+                description: 'the absorbed file to use',
+                type: 3,
+                required: true
+            }
+        ]
     }
 ]
 
@@ -130,6 +189,13 @@ ClassVisibility.init({
     guild: DataTypes.STRING,
     visible: DataTypes.BOOLEAN
 }, { sequelize, modelName: 'class-visibility' })
+
+class File extends Model {}
+File.init({
+    guild: DataTypes.STRING,
+    name: DataTypes.STRING,
+    content: DataTypes.STRING
+}, { sequelize, modelName: 'file' })
 
 class Invite extends Model {}
 Invite.init({
@@ -618,6 +684,13 @@ async function runSyncServers (guild, log, full) {
     await syncRegistrationPage(guild, log)
 }
 
+function* colorGenerator () {
+    while (true) {
+        yield '#6A0606'
+        yield '#E6B60A'
+    }
+}
+
 async function syncRegistrationPage (guild, log = null) {
     if (log == null) log = () => Promise.resolve()
 
@@ -646,12 +719,7 @@ async function syncRegistrationPage (guild, log = null) {
         })
     }
 
-    const colorGen = (function* () {
-        while (true) {
-            yield '#6A0606'
-            yield '#E6B60A'
-        }
-    })()
+    const colorGen = colorGenerator()
 
     await log('posting class-registration comments')
     const header = Array.from((await registration.messages.fetch()).values())
@@ -1103,6 +1171,135 @@ async function interactionHandler (interaction) {
                     }])
                 })
             }
+        }
+    }
+    
+    if (interaction.commandName === 'absorb-file') {
+        if (interaction.member.permissions.any('ADMINISTRATOR')) {
+            const messages = await realize(interaction.channel.messages)
+            const id = interaction.options.getString('message')
+            const message = messages.find(m => m.id === id)
+            if (message == null) {
+                await interaction.reply(`Couldn't find the message.`)
+            } else {
+                const file = message.attachments.first()
+                if (file == null) {
+                    await interaction.reply('No attachments found.')
+                } else {
+                    const {body} = await got.get(file.url)
+                    const [saved,] = await File.findOrCreate({
+                        where: {
+                            guild: interaction.guild.id,
+                            name: interaction.options.getString('name'),
+                        }
+                    })
+                    saved.content = body
+                    await saved.save()
+                    await interaction.reply(`Saved file contents to database.`)
+                }
+            }
+        } else {
+            await interaction.reply({
+                content: `I'm afraid I can't do that, ${interaction?.member?.displayName ?? 'Dave'}.`,
+                ephemeral: true
+            })
+        }
+    }
+
+    if (interaction.commandName === 'file-list') {
+        if (interaction.member.permissions.any('ADMINISTRATOR')) {
+            const files = await File.findAll({ where: { guild: interaction.guild.id } })
+            await interaction.reply(files.map(f => f.name).join('\r'))
+        } else {
+            await interaction.reply({
+                content: `I'm afraid I can't do that, ${interaction?.member?.displayName ?? 'Dave'}.`,
+                ephemeral: true
+            })
+        }
+    }
+
+    if (interaction.commandName === 'get-file') {
+        if (interaction.member.permissions.any('ADMINISTRATOR')) {
+            const name = interaction.options.getString('file-name')
+            const file = await File.findOne({
+                where: {
+                    guild: interaction.guild.id,
+                    name: name
+                }
+            })
+            const buf = Buffer.from(file.content, 'utf8')
+            await interaction.reply({
+                content: `Here's your file.`,
+                files: [new MessageAttachment(buf, `${file.name}.txt`)]
+            })
+        } else {
+            await interaction.reply({
+                content: `I'm afraid I can't do that, ${interaction?.member?.displayName ?? 'Dave'}.`,
+                ephemeral: true
+            })
+        }
+    }
+
+    if (interaction.commandName === 'delete-file') {
+        if (interaction.member.permissions.any('ADMINISTRATOR')) {
+            const name = interaction.options.getString('file-name')
+            const files = await File.findAll({
+                where: {
+                    guild: interaction.guild.id,
+                    name: name
+                }
+            })
+            for (let file of files) {
+                await file.destroy()
+            }
+            await interaction.reply({
+                content: `${name} was deleted`,
+                ephemeral: true
+            })
+        } else {
+            await interaction.reply({
+                content: `I'm afraid I can't do that, ${interaction?.member?.displayName ?? 'Dave'}.`,
+                ephemeral: true
+            })
+        }
+    }
+
+    if (interaction.commandName === 'post') {
+        if (interaction.member.permissions.any('ADMINISTRATOR')) {
+            const file = await File.findOne({
+                where: {
+                    guild: interaction.guild.id,
+                    name: interaction.options.getString('file-name')
+                }
+            })
+            const content = file.content
+            const colorGen = colorGenerator()
+            const embeds = content.split(/(?:\r\n|\r|\n){2}---(?:\r\n|\r|\n){2}/)
+                .map(c => {
+                    const titleRegex = /^# (.+)(\r\n|\r|\n)*/
+                    let embed = new MessageEmbed()
+                        .setColor(colorGen.next().value)
+                    if (titleRegex.test(c)) {
+                        embed = embed.setTitle(c.match(titleRegex)[1])
+                    }
+                    embed = embed
+                        .setDescription(c.replace(titleRegex, ''))
+                    return embed
+                })
+
+            await interaction.channel.send({
+                embeds: embeds
+            })
+
+            await interaction.reply({
+                content: 'done',
+                ephemeral: true
+            })
+        } else {
+            await interaction.reply({
+                content: `I'm afraid I can't do that, ${interaction?.member?.displayName ?? 'Dave'}.`,
+                ephemeral: true
+            })
         }
     }
 
