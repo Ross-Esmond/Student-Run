@@ -1266,6 +1266,11 @@ async function interactionHandler (interaction) {
 
     if (interaction.commandName === 'post') {
         if (interaction.member.permissions.any('ADMINISTRATOR')) {
+            const roles = new Map((await realize(interaction.guild.roles))
+                .map(r => [r.name, r]))
+            const channels = new Map((await realize(interaction.guild.channels))
+                .map(c => [c.name, c]))
+
             const file = await File.findOne({
                 where: {
                     guild: interaction.guild.id,
@@ -1282,8 +1287,21 @@ async function interactionHandler (interaction) {
                     if (titleRegex.test(c)) {
                         embed = embed.setTitle(c.match(titleRegex)[1])
                     }
+                    const tagRegex = /{(@|#)([^}]+)}/g
+                    const desc = c.replace(titleRegex, '')
+                        .replaceAll(
+                            tagRegex,
+                            s => {
+                                const [, w, t] = tagRegex.exec(s)
+                                tagRegex.lastIndex = 0
+                                if (w === '@') {
+                                    return `<@&${roles.get(t)?.id ?? 'not found'}>`
+                                } else if (w === '#') {
+                                    return `<#${channels.get(t)?.id ?? 'not found'}>`
+                                }
+                            })
                     embed = embed
-                        .setDescription(c.replace(titleRegex, ''))
+                        .setDescription(desc)
                     return embed
                 })
 
