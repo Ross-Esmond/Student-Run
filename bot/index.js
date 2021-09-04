@@ -222,6 +222,31 @@ Invite.init({
     code: DataTypes.STRING
 }, { sequelize, modelName: 'invite' })
 
+async function bigList (interaction, strings) {
+    if (strings.length === 0) {
+        await interaction.reply('Nothing to display.')
+    } else {
+        let chunks = [[[], 0]]
+        let index = 0
+        for (let t of strings) {
+            let [stack, lastLength] = chunks[index]
+            const nextLength = lastLength + 1 + t.length
+            if (nextLength > 2000) {
+                chunks.push([[], 0])
+                index++
+                [stack, lastLength] = chunks[index]
+            }
+            stack.push(t)
+            chunks[index][1] = lastLength + 1 + t.length
+        }
+        let first = true
+        for (let chunk of chunks) {
+            await interaction[first ? 'reply' : 'followUp'](chunk[0].join('\r'))
+            first = false
+        }
+    }
+}
+
 let commandHandlers = new Map()
 async function addState (name, attrs) {
     class Class extends Model {}
@@ -366,8 +391,8 @@ async function addState (name, attrs) {
     commandHandlers.set(`${name}-list`,
         async function (interaction) {
             const all = await Class.findAll({ where: { guild: interaction.guild.id } })
-            const tell = all.map(a => a.dataValues).map(d => `[${Object.keys(attrs).map(k => d[k]).join(',')}]`).join(', ')
-            await interaction.reply(tell || "None found.")
+            const tell = all.map(a => a.dataValues).map(d => `[${Object.keys(attrs).map(k => d[k]).join(',')}]`)
+            await bigList(interaction, tell)
         })
 
     Class.init({
@@ -1132,10 +1157,7 @@ async function interactionHandler (interaction) {
                 .filter(c => c.type === 'GUILD_TEXT')
                 .filter(c => c.lastMessageId === null)
 
-            const deletions = channels.length ? channels.map(c => c.name).join(', ') : 'empty categories'
-
             if (interaction.options.getBoolean('commit')) {
-                await interaction.reply(`Deleting ${deletions}.`)
                 for (let ch of channels) {
                     await ch.delete('Clean command was run.')
                 }
@@ -1145,9 +1167,9 @@ async function interactionHandler (interaction) {
                 for (let ch of removal) {
                     await ch.delete('Clean command was run.')
                 }
-            } else {
-                await interaction.reply(`If run with commit:True, I would delete ${deletions}.`)
             }
+
+            await bigList(interaction, channels.map(c => c.name))
         }
     }
 
@@ -1155,8 +1177,8 @@ async function interactionHandler (interaction) {
         if (interaction.member.permissions.any('MANAGE_ROLES')) {
             const emptyRoles = (await realize(interaction.guild.roles))
                 .filter(r => Array.from(r.members.values()).length === 0)
+
             if (interaction.options.getBoolean('commit')) {
-                await interaction.reply(`Deleting ${emptyRoles.map(r => r.name).join(', ')}.`)
                 for (let r of emptyRoles) {
                     try {
                         await r.delete()
@@ -1164,9 +1186,9 @@ async function interactionHandler (interaction) {
                         logger.error(e)
                     }
                 }
-            } else {
-                await interaction.reply(`If run with commit:True, I would delete ${emptyRoles.map(r => r.name).join(', ')}.`)
             }
+
+            await bigList(interaction, emptyRoles.map(r => r.name))
         }
     }
 
