@@ -633,8 +633,12 @@ async function runSyncServers (guild, log, full) {
     const postRolesByName = Array.from((await guild.roles.fetch()).values())
         .reduce(
             (m, r) => {
-                if (m.has(r.name)) throw new Error(`Multiple ${r.name} role found.`)
-                m.set(r.name, r); return m
+                if (m.has(r.name)){
+                    log(`WARNING: Multiple "${r.name}" role found.`)
+                } else {
+                    m.set(r.name, r)
+                }
+                return m
             },
             new Map())
     const sortedClasses = classes.map(c => c.name).sort().reverse()
