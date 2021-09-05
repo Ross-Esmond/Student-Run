@@ -996,7 +996,7 @@ async function handleButtonInteraction (interaction) {
         }
     } else {
         await interaction.reply({
-            content: `There was no ${role.name}. How weird...`,
+            content: `There was no ${interaction.customId}. How weird...`,
             ephemeral: true
         })
     }
