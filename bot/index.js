@@ -270,7 +270,7 @@ async function addState (name, attrs) {
                 name: key,
                 description: `The ${key} value for ${name}.`,
                 type: getType(value) === 'string' ? 3 : null,
-                required: true
+                required: value?.defaultValue != null ? false : true
             }))
         },
         {
@@ -423,7 +423,11 @@ const rest = new REST({ version: '9' }).setToken(process.env.BOT_TOKEN);
                 primaryKey: true
             },
             label: DataTypes.STRING,
-            emoji: DataTypes.STRING
+            emoji: DataTypes.STRING,
+            category: {
+                type: DataTypes.STRING,
+                defaultValue: ''
+            }
         })
         ClassChannel = await addState('class-channel', { name: DataTypes.STRING })
         Instructor = await addState('instructor', { 'class-name': DataTypes.STRING, 'instructor': DataTypes.STRING })
@@ -658,16 +662,15 @@ async function runSyncServers (guild, log, full) {
         where: { guild: guild.id },
         defaults: { visible: false }
     })
-    await log('creating class categories')
-    for (let myClass of classes) {
-        const allCap = myClass.name.toUpperCase()
+
+    function getPermissions (roleName) {
         let permissions = [
             {
                 id: everyone,
                 deny: visibility.visible ? [] : ['VIEW_CHANNEL']
             },
             {
-                id: postRolesByName.get(myClass.name),
+                id: postRolesByName.get(roleName),
                 allow: ['VIEW_CHANNEL']
             },
             {
@@ -685,15 +688,23 @@ async function runSyncServers (guild, log, full) {
                 allow: ['VIEW_CHANNEL']
             })
         }
-        if (!categories.has(allCap)) {
-            await guild.channels.create(allCap, {
-                type: 'GUILD_CATEGORY',
-                permissionOverwrites: permissions
-            })
-        } else {
-            await categories.get(allCap).edit({
-                permissionOverwrites: permissions
-            })
+        return permissions
+    }
+
+    await log('creating class categories')
+    for (let myClass of classes) {
+        if (myClass.category === '') {
+            const category = myClass.name.toUpperCase()
+            if (!categories.has(category)) {
+                await guild.channels.create(category, {
+                    type: 'GUILD_CATEGORY',
+                    permissionOverwrites: getPermissions(myClass.name)
+                })
+            } else {
+                await categories.get(category).edit({
+                    permissionOverwrites: getPermissions(myClass.name)
+                })
+            }
         }
     }
 
@@ -707,12 +718,27 @@ async function runSyncServers (guild, log, full) {
             const channelName = `${channel.name}-${myClass.name}`
             let ch
             if (!existing.has(channelName)) {
+                let parent
+                if (myClass.category !== '') {
+                    parent = myClass.category
+                } else {
+                    parent = myClass.name.toUpperCase()
+                }
                 existing.set(channelName,
                     await guild.channels.create(channelName, {
-                        parent: nextCategories.get(myClass.name.toUpperCase())
+                        parent: nextCategories.get(parent),
+                        permissionOverwrites: getPermissions(myClass.name)
                     }))
+            } else {
+                await existing.get(channelName).edit({
+                    permissionOverwrites: getPermissions(myClass.name)
+                })
             }
-            await existing.get(channelName).lockPermissions()
+            try {
+                if (myClass.category === '') {
+                    await existing.get(channelName).lockPermissions()
+                }
+            } catch (e) { }
         }
     }
 
@@ -725,7 +751,9 @@ async function runSyncServers (guild, log, full) {
                     parent: nextCategories.get(insr['class-name'].toUpperCase())
                 }))
         }
-        await existing.get(channelName).lockPermissions()
+        try {
+            await existing.get(channelName).lockPermissions()
+        } catch (e) { }
     }
 
     await syncRegistrationPage(guild, log)
