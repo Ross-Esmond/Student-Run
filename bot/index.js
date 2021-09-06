@@ -423,7 +423,10 @@ const rest = new REST({ version: '9' }).setToken(process.env.BOT_TOKEN);
                 primaryKey: true
             },
             label: DataTypes.STRING,
-            emoji: DataTypes.STRING,
+            emoji: {
+                type: DataTypes.STRING,
+                defaultValue: ''
+            },
             category: {
                 type: DataTypes.STRING,
                 defaultValue: ''
