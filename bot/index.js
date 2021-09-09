@@ -718,7 +718,11 @@ async function runSyncServers (guild, log, full) {
     await log('creating class channels')
     for (let myClass of classes) {
         for (let channel of channels) {
-            const channelName = `${channel.name}-${myClass.name}`
+            if (channelName === '-') {
+                const channelName = `${myClass.name}`
+            } else {
+                const channelName = `${channel.name}-${myClass.name}`
+            }
             let ch
             if (!existing.has(channelName)) {
                 let parent
