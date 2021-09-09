@@ -819,7 +819,7 @@ async function syncRegistrationPage (guild, log = null) {
         })
     }
 
-    for (let level of [1, 2, 3, 4, 5, 8]) {
+    for (let level of [1, 2, 3, 4, 5, 6, 8]) {
         const levelClasses = classes
             .map(c => [c.emoji, c.name, c.label])
             .filter(([, n,]) => /^[a-z]{2,4}-(\d)\d{3}(W|H|w|h)?$/.exec(n)?.[1] === level.toString())
