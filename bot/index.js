@@ -397,7 +397,10 @@ async function addState (name, attrs) {
 
     Class.init({
         ...attrs,
-        guild: DataTypes.STRING
+        guild: {
+            type: DataTypes.STRING,
+            primaryKey: primaryKey != null ? true : false
+        },
     }, { sequelize, modelName: name })
 
     return Class
