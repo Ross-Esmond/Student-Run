@@ -636,8 +636,11 @@ async function runSyncServers (guild, log, full) {
         if (role == null) {
             role = await guild.roles.create({
                 name: myClass.name,
-                reasion: 'Class role didn\'t exist.'
+                reason: 'Class role didn\'t exist.',
+                mentionable: true
             })
+        } else {
+            role.setMentionable(true)
         }
     }
     const postRolesByName = Array.from((await guild.roles.fetch()).values())
